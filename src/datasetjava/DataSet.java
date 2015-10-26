@@ -91,7 +91,7 @@ public class DataSet {
         tableCount++; // table index starts from 0
     }
 
-    public void addTable(String tableName) {
+    public void addNewTable(String tableName) {
         for (int index = 0; index < dataTables.size(); index++) {
             if (dataTables.get(index).getName().equalsIgnoreCase(tableName)) {
                 System.err.println("Table name exists in DataSet!\n Creating table FAILED!");
