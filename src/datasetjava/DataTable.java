@@ -194,6 +194,7 @@ public class DataTable {
                 case "INTEGER":
                 case "int":
                 case "integer":
+                case "Integer":
                 case "INT":
                     return Integer;
                 case "FLOAT":
@@ -202,6 +203,7 @@ public class DataTable {
                 case "real":
                 case "DOUBLE":
                 case "double":
+                case "Double":
                     return Double;
                 default:
                     return String;
@@ -248,6 +250,37 @@ public class DataTable {
         }
     }
 
+    public enum functionType {
+
+        Sum, Avg;
+
+        public static functionType getType(String value) {
+            value = value.toLowerCase().trim();
+
+            if (value.equals("sum")) {
+                return Sum;
+            } else if (value.equals("avg")) {
+                return Avg;
+            }
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            if (this == null) {
+                return "";
+            }
+
+            switch (this) {
+                case Sum:
+                    return "sum";
+                case Avg:
+                    return "avg";
+            }
+            return "";
+        }
+    }
+
     public void exportTXT(String path, String[] header, DecimalFormat doubleFormate, itemDividerType divider) throws IOException {
         if (header.length != fieldCount) {
             System.err.println("Header length error in DataTable printing");
@@ -266,8 +299,8 @@ public class DataTable {
             System.err.println("Error during exporting DataTable to txt file");
         }
     }
-    
-    public String toText(String[] header, DecimalFormat doubleFormate, itemDividerType divider){
+
+    public String toText(String[] header, DecimalFormat doubleFormate, itemDividerType divider) {
         StringBuilder sb = new StringBuilder();
         String sep = System.getProperty("line.separator");
 
@@ -302,7 +335,7 @@ public class DataTable {
             }
             sb.append(sep);
         }
-        
+
         return sb.toString();
     }
 
@@ -434,23 +467,94 @@ public class DataTable {
     }
 
     public DataTable compute(String sql) {
+        String sqlLower = sql.toLowerCase();
+
+        if (sqlLower.contains("distinct")) {
+            sqlLower = sqlLower.replace("distinct", "");
+        }
+
+        String fieldsString = sqlLower.split("from")[0].replace("select", "").trim();
+
+        functionType funcType = this.getFunctionType(fieldsString);
+
+        boolean isFunction = (funcType != null);
+
+        if (isFunction) {
+            fieldsString = fieldsString.replace(funcType.toString(), "");
+            fieldsString = fieldsString.replace("(", "");
+            fieldsString = fieldsString.replace(")", "");
+        }
+
         int[] rows = this.getRowsFromSQL(sql);
-        int[] cols = this.getColsFromSQL(sql);
+        int[] cols = this.getColsFromSQL(fieldsString);
 
         boolean isDistinct = sql.toLowerCase().contains("distinct");
+
+        DataTable outTable = new DataTable();
 
         if (isDistinct) {
             if (rows.length > 0) {
                 String fieldName = sql.toLowerCase().split("from")[0].split("distinct")[1].trim();
-                return computeDistinct(rows, fieldName);
+                outTable = computeDistinct(rows, fieldName);
             }
         } else {
             if (rows.length > 0 && cols.length > 0) {
-                return compute(rows, cols);
+                outTable = compute(rows, cols);
+            }
+        }
+        
+        if (isFunction) {
+            return computeFunction(outTable, funcType);
+        }
+
+        return outTable;
+    }
+
+    private DataTable computeFunction(DataTable table, functionType type) {
+        DataTable dt = new DataTable();
+        for (String fieldName : table.getFieldNames()) {
+            dt.addField(fieldName, table.getField(fieldName).getType());
+        }
+
+        double count = table.getRecordCount();
+        if (count < 1) {
+            return dt;
+        }
+
+        dt.addRecord();
+
+        for (String fieldName : table.getFieldNames()) {
+            Field f = table.getField(fieldName);
+
+            double sum = 0;
+            for (int rec = 0; rec < count; rec++) {
+                double d = (double) f.get(rec);
+                sum += (double) f.get(rec);;
+            }
+
+            switch (type) {
+                case Sum:
+                    dt.getField(fieldName).set(dt.getRecordCount() - 1, sum);
+                    break;
+                case Avg:
+                    dt.getField(fieldName).set(dt.getRecordCount() - 1, sum / count);
+                    break;
             }
         }
 
-        return new DataTable();
+        return dt;
+    }
+
+    private functionType getFunctionType(String fieldsString) {
+        functionType out = null;
+
+        for (functionType type : functionType.values()) {
+            if (fieldsString.startsWith(type.toString())) {
+                return type;
+            }
+        }
+
+        return out;
     }
 
     public DataTable compute(int[] rows, int[] columns) {
@@ -635,16 +739,10 @@ public class DataTable {
         return out;
     }
 
-    private int[] getColsFromSQL(String sql) {
+    private int[] getColsFromSQL(String fieldsString) {
         int[] out = null;
 
-        String sqlLower = sql.toLowerCase();
-
-        if (sqlLower.contains("distinct")) {
-            sqlLower = sqlLower.replace("distinct", "");
-        }
-
-        String[] fields = sqlLower.split("from")[0].replace("select", "").split(",");
+        String[] fields = fieldsString.split(",");
 
         List<Integer> cols = new ArrayList();
         for (String field : fields) {
@@ -781,20 +879,20 @@ public class DataTable {
 
     public DataTable getOrderedTable(String fieldName, boolean isAscending) {
         int[] newOrder = getField(fieldName).getSortedOrder(isAscending);
-        
+
         DataTable orderedTable = new DataTable(getName());
-        
+
         for (int i = 0; i < fieldCount; i++) {
             orderedTable.addField(getField(i).getName(), getField(i).getType());
         }
-        
+
         for (int i = 0; i < newOrder.length; i++) {
             orderedTable.addRecord();
             for (int j = 0; j < fieldCount; j++) {
                 orderedTable.getField(j).set(i, getRecord(newOrder[i]).get(j));
             }
         }
-        
+
         return orderedTable;
     }
 

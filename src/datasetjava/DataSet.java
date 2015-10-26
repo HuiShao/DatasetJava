@@ -54,7 +54,7 @@ public class DataSet {
                 }
                 DataTable dt = DataTable.importSQLiteTable(sqlitePath, tableName);
 
-                ds.addTable(dt);
+                ds.insertTable(dt);
                 System.out.println(tableName + " : " + (ds.getTableCount() - 1));
             }
             ds.setPath(sqlitePath);
@@ -79,10 +79,10 @@ public class DataSet {
 
     }
 
-    public void addTable(DataTable table) {
+    public void insertTable(DataTable table) {
         for (int index = 0; index < dataTables.size(); index++) {
             if (dataTables.get(index).getName().equalsIgnoreCase(table.getName())) {
-                System.err.println("Field name exists in DataSet!");
+                System.err.println("Table exists in DataSet!\n Inserting table FAILED!");
                 return;
             }
         }
@@ -290,7 +290,7 @@ public class DataSet {
 //        String outPath = "C:\\Users\\Shao\\Desktop\\New folder\\" + dt.getName() + ".csv";
 //        dt.exportCSV(outPath);
 //        
-//        ds.addTable(dt);
+//        ds.insertTable(dt);
 //        
 //        ds.setPath("");
 //        
