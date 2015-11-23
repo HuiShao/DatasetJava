@@ -65,7 +65,7 @@ public class Record {
         String names = "", values = "";
         
         for (int i = 0; i < getFieldCount(); i++) {
-            names += getFieldNames()[i];
+            names += String.format("\'%s\'", getFieldNames()[i]);
             String value = "";
             if (get(i) != null) {
                 value = get(i).toString();

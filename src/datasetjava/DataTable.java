@@ -325,7 +325,7 @@ public class DataTable {
                         item = this.getRecord(recordIndex).get(fieldIndex).toString();
                         break;
                     case Double:
-                        item = doubleFormate.format(this.getRecord(recordIndex).get(fieldIndex));
+                        item = doubleFormate.format(Double.valueOf(this.getRecord(recordIndex).get(fieldIndex).toString().trim()));
                         break;
                     case String:
                         item = this.getRecord(recordIndex).get(fieldIndex).toString();
@@ -346,7 +346,7 @@ public class DataTable {
         }
 
         try {
-            exportTXT(path, header, null, dividerType);
+            exportTXT(path, header, doubleFormate, dividerType);
         } catch (IOException ex) {
             Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
         }

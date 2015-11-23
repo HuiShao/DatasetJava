@@ -88,7 +88,7 @@ public class Field {
     public String buildFieldDeclarationSQLite(){
 
         //Column name;
-        String sql = String.format("%s ", getName());
+        String sql = String.format("%s%s%s ", "'", getName(), "'");
 
         //Determine the appropriate data type;
 

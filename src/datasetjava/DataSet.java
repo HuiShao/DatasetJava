@@ -143,6 +143,9 @@ public class DataSet {
             } else if (index > tableIndex) {
                 dataTables.put(index - 1, dataTables.get(index));
             }
+            if (index == tableCount - 1) {
+                dataTables.remove(index);
+            }
         }
         tableCount--;
     }
