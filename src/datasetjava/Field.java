@@ -3,8 +3,6 @@ package datasetjava;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeSet;
 
 /*
  * To change this license header, choose License Headers in Project Properties.
@@ -24,6 +22,7 @@ public class Field {
     private boolean isPrimaryKey = false;
     private boolean isUnique = false;
     private boolean isNullDefaultValue = true;
+    private boolean isChanged = true;
     
     public Field(String fieldName, DataTable.fieldType type){
         name = fieldName;
@@ -41,6 +40,68 @@ public class Field {
             default:
                 map = new java.util.TreeMap<Integer, String>();
         }
+        isChanged = true;
+    }
+    
+    public Field(Field copyField){
+        name = new String(copyField.name);
+        fieldType = DataTable.fieldType.getType(copyField.fieldType.toString());
+        switch (fieldType){
+            case String:
+                map = new java.util.TreeMap<Integer, String>();
+                String valueString;
+                for (Object i : copyField.map.keySet()) {
+                    try {
+                        valueString = copyField.map.get(i).toString();
+                    } catch (Exception e) {
+                        valueString = "";
+                    }
+                    map.put((int) i, valueString);
+                }
+                break;
+            case Integer:
+                map = new java.util.TreeMap<Integer, Integer>();
+                int valueInt;
+                for (Object i : copyField.map.keySet()) {
+                    try {
+                        valueInt = Integer.valueOf(copyField.map.get(i).toString());
+                    } catch (Exception e) {
+                        valueInt = 0;
+                    }
+                    map.put((int) i, valueInt);
+                }
+                break;
+            case Double:
+                map = new java.util.TreeMap<Integer, Double>();
+                double valueDouble;
+                for (Object i : copyField.map.keySet()) {
+                    try {
+                        valueDouble = Double.valueOf(copyField.map.get(i).toString());
+                    } catch (Exception e) {
+                        valueDouble = 0.0;
+                    }
+                    map.put((int) i, valueDouble);
+                }
+                break;
+            default:
+                map = new java.util.TreeMap<Integer, String>();
+                for (Object i : copyField.map.keySet()) {
+                    try {
+                        valueString = copyField.map.get(i).toString();
+                    } catch (Exception e) {
+                        valueString = "";
+                    }
+                    map.put((int) i, valueString);
+                }
+        }
+        isNullDefaultValue = copyField.isNullDefaultValue;
+        isPrimaryKey = copyField.isPrimaryKey;
+        isUnique = copyField.isUnique;
+        isChanged = true;
+    }
+    
+    public Field getEmptyField() {
+        return new Field(name, fieldType);
     }
     
     public DataTable.fieldType getType(){
@@ -55,10 +116,12 @@ public class Field {
     
     public void set(int recNum, Object value){
         map.put(recNum, value);
+        isChanged = true;
     }
     
     public void remove(int recNum) {
         map.remove(recNum);
+        isChanged = true;
     }
     
     public Object get(int recNum){
@@ -83,6 +146,14 @@ public class Field {
     
     public boolean isPrimaryKey(){
         return isPrimaryKey;
+    }
+    
+    public boolean isChanged() {
+        return isChanged;
+    }
+    
+    public void setIsChanged(boolean value) {
+        isChanged = value;
     }
     
     public String buildFieldDeclarationSQLite(){

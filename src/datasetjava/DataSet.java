@@ -11,7 +11,9 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -45,6 +47,9 @@ public class DataSet {
             Connection connection;
             Class.forName("org.sqlite.JDBC");
             connection = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath);
+//            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+            
+            System.out.println("OpenDS : " + sqlitePath);
 
             java.sql.ResultSet tablesRS = connection.getMetaData().getTables(null, null, "%", null);
             while (tablesRS.next()) {
@@ -53,12 +58,11 @@ public class DataSet {
                     continue;
                 }
                 DataTable dt = DataTable.importSQLiteTable(sqlitePath, tableName);
-
-                ds.insertTable(dt);
                 System.out.println(tableName + " : " + (ds.getTableCount() - 1));
+                ds.insertTable(dt);
             }
             ds.setPath(sqlitePath);
-        } catch (ClassNotFoundException | SQLException e) {
+        } catch (SQLException | ClassNotFoundException e) {
             System.err.println(e.getClass().getName() + ": " + e.getMessage());
             Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
         }
@@ -87,7 +91,7 @@ public class DataSet {
             }
         }
 
-        dataTables.put(tableCount, table);
+        dataTables.put(tableCount, new DataTable(table));
         tableCount++; // table index starts from 0
     }
 
@@ -184,8 +188,14 @@ public class DataSet {
         String out;
         if (sql.toLowerCase().contains("where")) {
             out = sql.toLowerCase().split("where")[0].split("from")[1].trim();
+            if (out.contains("order by")) {
+                out = out.split("order by")[0].trim();
+            }
         } else {
             out = sql.toLowerCase().split("from")[1].trim();
+            if (out.contains("order by")) {
+                out = out.split("order by")[0].trim();
+            }
         }
         return out;
     }
@@ -236,15 +246,71 @@ public class DataSet {
                 Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+        
+        this.clearDeletedTables(getPath());
 
         for (DataTable table : dataTables.values()) {
+            if (!table.isTableChanged()) {
+                continue;
+            }
             if (!table.isReadOnly()) {
                 table.exportSQLite(getPath());
+                table.setIsTableChangedFalse();
             } else {
                 String message = "Table \'" + table.getName() + "\' is READ ONLY! CAN NOT be exported!";
                 JOptionPane.showMessageDialog(null, message,
                             "Error", JOptionPane.ERROR_MESSAGE);
                     return;
+            }
+        }
+    }
+    
+    private ArrayList<String> getDeletedTableNames(String pathDB) {
+        Connection conn = Query.OpenSQLiteConnection(pathDB);
+        ArrayList<String> tableNames = new ArrayList();
+        try {
+            conn.setAutoCommit(false);
+            String searchSQL = "select distinct tbl_name from sqlite_master";
+            ResultSet rs = conn.createStatement().executeQuery(searchSQL);
+            while (rs.next()) {
+                String tableName = rs.getString("tbl_name");
+                if (!containsTable(tableName)) {
+                    tableNames.add(tableName);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+        } finally {
+            try {
+                conn.commit();
+//                conn.close();
+            } catch (SQLException ex) {
+                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return tableNames;
+    }
+    
+    private void clearDeletedTables(String pathDB) {
+        Connection conn = Query.OpenSQLiteConnection(pathDB);
+        try {
+            conn.setAutoCommit(false);
+            for (String tableName : getDeletedTableNames(pathDB)) {
+                String dropSQL = "drop table if exists " + tableName;
+                conn.prepareStatement(dropSQL).executeUpdate();
+            }
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+        } finally {
+            try {
+                conn.commit();
+                conn.close();
+            } catch (SQLException ex) {
+                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
     }
@@ -272,35 +338,20 @@ public class DataSet {
 
     //This method is only used during testing.
     public static void main(String[] args) {
-        String inPath = "C:\\Users\\Shao\\Desktop\\lookup.db3";
-
+        String inPath = "C:\\Users\\Shawn\\Desktop\\base_historical.db3";
+        
         DataSet ds = DataSet.importSQLiteDatabase(inPath);
 
-        String[] names = ds.getTableNames();
+        DataTable dt = ds.getTable("wascobs_all");
 
-        for (int i = 0; i < names.length; i++) {
-            System.out.println(names[i]);
-        }
-//        String tableName = "data_twin_sr";
-
-//        String sql = "select id, year, water, sediment from hru where year >= 2005 and year <= 2007 and sediment > 1";
-//        DataSet ds = DataSet.importSQLiteDatabase(inPath);
-//        
-//        DataTable dt = ds.compute(sql);
-//        
-//        dt.setName("hru_new");
-//        
-//        String outPath = "C:\\Users\\Shao\\Desktop\\New folder\\" + dt.getName() + ".csv";
-//        dt.exportCSV(outPath);
-//        
-//        ds.insertTable(dt);
-//        
-//        ds.setPath("");
-//        
-//        ds.save();
-//        for (int i = 0; i < ds.getTableCount(); i++){
-//            String outPath = "C:\\Users\\Shao\\Desktop\\New folder\\" + ds.getTable(i).getName() + ".csv";
-//            ds.getTable(i).exportCSV(outPath);
-//        }
+        int[] recNum = dt.getRecordNumbers("id = 17");
+                
+        dt.deleteRecords(recNum);
+        
+        recNum = dt.getRecordNumbers("id = 13");
+                
+        dt.deleteRecords(recNum);
+        
+        ds.save();
     }
 }

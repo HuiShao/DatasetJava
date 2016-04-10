@@ -62,7 +62,7 @@ public class Query {
             connection = (Connection) activeConnections.get(path_abs);
         } else {
             //Check if the file exists;
-            if (new File(path_abs).exists()) {
+//            if (!new File(path_abs).exists()) {
                 //ActiveStatus.UpdateInnerStatus(new FileOpStatus("The file could not be found or created in accessing a database.", Environment.StackTrace, Path.GetFullPath(path)));
                 //Check if the directory exists;
                 if (!new File(path_par).exists()) {
@@ -81,7 +81,7 @@ public class Query {
                 if (connection != null) {
                     activeConnections.put(path_abs, connection);
                 }
-            }
+//            }
         }
         if (connection != null) {
             try {

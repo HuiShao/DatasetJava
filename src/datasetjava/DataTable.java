@@ -13,6 +13,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.TreeMap;
@@ -23,7 +24,7 @@ import java.util.logging.Logger;
  *
  * @author Shao
  */
-public class DataTable {
+public class DataTable implements Cloneable {
 
     private TreeMap<Integer, Field> fields;
     private int recordCount;
@@ -43,6 +44,30 @@ public class DataTable {
         fields = new TreeMap();
         recordCount = 0;
         fieldCount = 0;
+    }
+
+    public DataTable(DataTable cloneTable) {
+        tableName = new String(cloneTable.tableName);
+        fields = new TreeMap();
+        for (int i = 0; i < cloneTable.getFieldCount(); i++) {
+            fields.put(i, new Field(cloneTable.getField(i)));
+        }
+        recordCount = new Integer(cloneTable.recordCount);
+        fieldCount = new Integer(cloneTable.fieldCount);
+        isReadOnly = cloneTable.isReadOnly;
+        defaultPrimaryKey = cloneTable.defaultPrimaryKey;
+    }
+
+    public DataTable getEmptyTable() {
+        DataTable out = new DataTable();
+
+        out.setName(new String(tableName));
+
+        for (int i = 0; i < getFieldCount(); i++) {
+            out.addField(fields.get(i).getName(), fields.get(i).getType());
+        }
+
+        return out;
     }
 
     public void setName(String value) {
@@ -80,17 +105,59 @@ public class DataTable {
         recordCount++; // record number starts from 0
     }
 
+    public void addRecord(Record rec) {
+        if (!isRecordValid(rec)) {
+            return;
+        }
+
+        addRecord();
+
+        for (int i = 0; i < fieldCount; i++) {
+            fields.get(i).set(recordCount - 1, rec.get(i));
+        }
+    }
+
+    public boolean isRecordValid(Record rec) {
+        if (fieldCount != rec.getFieldCount()) {
+            return false;
+        }
+
+        for (int i = 0; i < fieldCount; i++) {
+            if (!fields.get(i).getName().equalsIgnoreCase(rec.getTable().getField(i).getName())
+                    || fields.get(i).getType() != rec.getTable().getField(i).getType()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public boolean compareTableFields(DataTable compareTable) {
+        if (fieldCount != compareTable.getFieldCount()) {
+            return false;
+        }
+
+        for (int i = 0; i < fieldCount; i++) {
+            if (!fields.get(i).getName().equalsIgnoreCase(compareTable.getField(i).getName())
+                    || fields.get(i).getType() != compareTable.getField(i).getType()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public Record getRecord(int recNum) {
         if (recordCount <= recNum) {
             return null;
         }
-        TreeMap<Integer, Field> row = new TreeMap();
-        for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-            Field rowItem = new Field(fields.get(fieldIndex).getName(), fields.get(fieldIndex).getType());
-            rowItem.set(recNum, fields.get(fieldIndex).get(recNum));
-            row.put(fieldIndex, rowItem);
-        }
-        return new Record(recNum, row);
+//        TreeMap<Integer, Field> row = new TreeMap();
+//        for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+//            Field rowItem = new Field(fields.get(fieldIndex).getName(), fields.get(fieldIndex).getType());
+//            rowItem.set(recNum, fields.get(fieldIndex).get(recNum));
+//            row.put(fieldIndex, rowItem);
+//        }
+        return new Record(recNum, this);
     }
 
     public int getRecordCount() {
@@ -113,9 +180,106 @@ public class DataTable {
         }
     }
 
+    public void deleteRecords(List<Integer> recNums) {
+        if (recNums == null || recNums.size() == 0) {
+            return;
+        }
+
+        List<Integer> tempList = new ArrayList();
+        for (int i : recNums) {
+            tempList.add(i);
+        }
+        tempList.sort(null);
+
+        for (int i = tempList.size() - 1; i >= 0; i--) {
+            deleteRecord(tempList.get(i));
+        }
+    }
+
+    public void deleteRecords(int[] recNums) {
+        if (recNums == null || recNums.length == 0) {
+            return;
+        }
+        List<Integer> tempList = new ArrayList();
+        for (int i : recNums) {
+            tempList.add(i);
+        }
+        tempList.sort(null);
+
+        for (int i = tempList.size() - 1; i >= 0; i--) {
+            deleteRecord(tempList.get(i));
+        }
+    }
+
+    public int[] getRecordNumbers(String... args) {
+        if (args == null || args.length == 0) {
+            return new int[0];
+        }
+
+        int[] out;
+
+        String conditions = "";
+        String fields = "";
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].contains(">=")) {
+                fields += ("," + args[i].split(">=")[0].trim().replace("\"", "").replace("\'", ""));
+            } else if (args[i].contains("<=")) {
+                fields += ("," + args[i].split("<=")[0].trim().replace("\"", "").replace("\'", ""));
+            } else if (args[i].contains(">")) {
+                fields += ("," + args[i].split(">")[0].trim().replace("\"", "").replace("\'", ""));
+            } else if (args[i].contains("<")) {
+                fields += ("," + args[i].split("<")[0].trim().replace("\"", "").replace("\'", ""));
+            } else if (args[i].contains("=")) {
+                fields += ("," + args[i].split("=")[0].trim().replace("\"", "").replace("\'", ""));
+            }
+
+            conditions += (" and " + args[i]);
+        }
+
+        if (fields.startsWith(",")) {
+            fields = fields.replaceFirst(",", "");
+        }
+        if (conditions.startsWith(" and ")) {
+            conditions = conditions.replaceFirst(" and ", "");
+        }
+
+        String sql = String.format("SELECT %s FROM %s WHERE %s", fields, getName(), conditions);
+
+        out = this.getRowsFromSQL(sql);
+
+        return out;
+    }
+
+    public Record getEmptyRecord() {
+        DataTable table = this.getEmptyTable();
+        table.addRecord();
+        return table.getRecord(0);
+    }
+
+    public Record getRecordCopy(int rec) {
+        return new Record(getRecord(rec));
+    }
+
+    public List<Record> getRecordsCopy(String... args) {
+        List<Record> out = new ArrayList();
+
+        for (int i : getRecordNumbers(args)) {
+            out.add(getRecordCopy(i));
+        }
+
+        return out;
+    }
+
+    public List<Integer> getRecordNumbersList(String... args) {
+        return new ArrayList(Arrays.asList(getRecordNumbers(args)));
+    }
+
     public void clearRecords() {
-        for (Field field : fields.values()) {
-            field = new Field(field.getName(), field.getType());
+        for (int i = 0; i < this.fieldCount; i++) {
+            if (fields.containsKey(i)) {
+                Field field = new Field(fields.get(i).getName(), fields.get(i).getType());
+                fields.put(i, field);
+            }
         }
         recordCount = 0; // record number starts from 0
     }
@@ -156,20 +320,30 @@ public class DataTable {
         return fieldCount;
     }
 
+    String[] fieldNames;
+
     public String[] getFieldNames() {
-        String[] names = new String[fields.size()];
-        for (int i = 0; i < this.fieldCount; i++) {
-            names[i] = fields.get(i).getName();
+        if (fieldNames == null || fieldNames.length != fields.size()) {
+            fieldNames = new String[fields.size()];
+            for (int i = 0; i < this.fieldCount; i++) {
+                fieldNames[i] = fields.get(i).getName();
+            }
         }
-        return names;
+
+        return fieldNames;
     }
 
+    fieldType[] fieldTypes;
+
     public fieldType[] getFieldTypes() {
-        fieldType[] types = new fieldType[fields.size()];
-        for (int i = 0; i < this.fieldCount; i++) {
-            types[i] = fields.get(i).getType();
+        if (fieldTypes == null || fieldTypes.length != fields.size()) {
+            fieldTypes = new fieldType[fields.size()];
+            for (int i = 0; i < this.fieldCount; i++) {
+                fieldTypes[i] = fields.get(i).getType();
+            }
         }
-        return types;
+
+        return fieldTypes;
     }
 
     public boolean containsField(String fieldName) {
@@ -179,6 +353,27 @@ public class DataTable {
             }
         }
         return false;
+    }
+
+    public boolean isTableChanged() {
+        for (Field field : fields.values()) {
+            if (field.isChanged()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void setIsTableChangedFalse() {
+        for (Field field : fields.values()) {
+            field.setIsChanged(false);
+        }
+    }
+
+    public void setIsTableChanged(boolean value) {
+        for (Field field : fields.values()) {
+            field.setIsChanged(value);
+        }
     }
 
     public String getName() {
@@ -387,30 +582,105 @@ public class DataTable {
         }
     }
 
-    public void exportSQLite(String path, Record[] records) {
-        String sql = "";
-
-        for (int i = 0; i < records.length; i++) {
-            sql += "insert into " + tableName + records[i].getSQLiteInsertQuery();
-        }
+    public void exportSQLite(String path, List<Integer> recs) {
+//        String sql = "";
+//
+//        for (int i = 0; i < records.length; i++) {
+//            sql += "insert into " + tableName + records[i].getSQLiteInsertQuery();
+//        }
 
         prepareTable(path);
-        exportSQLite(path, sql);
+        exportSQLite(path, getSQLiteInsertQuery(recs));
     }
+    
+    private final int oneTimeRecords = 2000;
 
     public void exportSQLite(String path) {
-        String sql = "";
-
-        for (int i = 0; i < recordCount; i++) {
-            sql += "insert into " + tableName + getRecord(i).getSQLiteInsertQuery();
-        }
+//        String sql = "";
+//
+//        for (int i = 0; i < recordCount; i++) {
+//            sql += "insert into " + tableName + getRecord(i).getSQLiteInsertQuery();
+//        }
 
         prepareTable(path);
-        exportSQLite(path, sql);
+        if (this.getRecordCount() > oneTimeRecords) {
+            int times = getRecordCount() / oneTimeRecords;
+            int reminds = getRecordCount() % oneTimeRecords;
+            List<Integer> recs = new ArrayList();
+            for (int i = 0; i < times; i++) {
+                recs = new ArrayList();
+                for (int j = 0; j < oneTimeRecords; j++) {
+                    recs.add(j + i * oneTimeRecords);
+                }
+                this.exportSQLite(path, getSQLiteInsertQuery(recs));
+
+            }
+
+            recs = new ArrayList();
+            for (int j = times * oneTimeRecords; j < times * oneTimeRecords + reminds; j++) {
+                recs.add(j);
+            }
+            this.exportSQLite(path, getSQLiteInsertQuery(recs));
+        } else {
+            exportSQLite(path, getSQLiteInsertQuery());
+        }
+
+    }
+
+    private String getSQLiteInsertQuery(List<Integer> recs) {
+//        String sql = "";
+        StringBuilder sb = new StringBuilder();
+
+        for (int rec : recs) {
+            String names = "", values = "";
+
+            for (int i = 0; i < getFieldCount(); i++) {
+                names += String.format("\'%s\'", getFieldNames()[i]);
+                String value = "";
+                if (getField(i).get(rec) != null) {
+                    value = getField(i).get(rec).toString();
+                }
+                values += String.format("\'%s\'", value);
+                if (i < getFieldCount() - 1) {
+                    names += ",";
+                    values += ",";
+                }
+            }
+            sb.append("insert into " + tableName + " (" + names + ") values (" + values + ");");
+        }
+
+        return sb.toString();
+    }
+
+    private String getSQLiteInsertQuery() {
+        StringBuilder sb = new StringBuilder();
+
+//        String sql = "";
+        for (int rec = 0; rec < recordCount; rec++) {
+            String names = "", values = "";
+
+            for (int i = 0; i < getFieldCount(); i++) {
+                names += String.format("\'%s\'", getFieldNames()[i]);
+                String value = "";
+                if (getField(i).get(rec) != null) {
+                    value = getField(i).get(rec).toString();
+                }
+                values += String.format("\'%s\'", value);
+                if (i < getFieldCount() - 1) {
+                    names += ",";
+                    values += ",";
+                }
+            }
+//            sql += "insert into " + tableName + " (" + names + ") values (" + values + ");";
+            sb.append("insert into " + tableName + " (" + names + ") values (" + values + ");");
+        }
+
+        return sb.toString();
     }
 
     public void exportSQLite(String path, int startRec, int endRec) {
-        String sql = "";
+//        String sql = "";
+        StringBuilder sb = new StringBuilder();
         if (startRec < 0) {
             startRec = 0;
         }
@@ -423,19 +693,20 @@ public class DataTable {
                 continue;
             }
 
-            sql += "insert into " + tableName + getRecord(i).getSQLiteInsertQuery();
+            sb.append("insert into " + tableName + getRecord(i).getSQLiteInsertQuery());
         }
 
         prepareTable(path);
-        exportSQLite(path, sql);
+        exportSQLite(path, sb.toString());
     }
 
     public static DataTable importSQLiteTable(String sqlitePath, String tableName) {
         DataTable dt = new DataTable(tableName);
         try {
-            Connection connection;
-            Class.forName("org.sqlite.JDBC");
-            connection = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath);
+//            Connection connection;
+//            Class.forName("org.sqlite.JDBC");
+//            connection = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath);
+            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
             String sql = "Select * from " + tableName;
 
             java.sql.ResultSet rs = connection.createStatement().executeQuery(sql);
@@ -455,10 +726,12 @@ public class DataTable {
                 }
             }
 
+            dt.setIsTableChangedFalse();
+
             if (dt.getFieldCount() != fieldCount) {
                 System.err.println("Importing SQLite Error!");
             }
-        } catch (ClassNotFoundException | SQLException e) {
+        } catch (SQLException e) {
             System.err.println(e.getClass().getName() + ": " + e.getMessage());
             Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, e);
         }
@@ -475,6 +748,16 @@ public class DataTable {
 
         String fieldsString = sqlLower.split("from")[0].replace("select", "").trim();
 
+        boolean isOrderBy = false;
+        int orderCol = -1;
+        if (sqlLower.contains("order by")) {
+            isOrderBy = true;
+            String orderName = sqlLower.split("order by")[1].trim();
+            if (containsField(orderName)) {
+                orderCol = getColsFromSQL(orderName)[0];
+            }
+        }
+
         functionType funcType = this.getFunctionType(fieldsString);
 
         boolean isFunction = (funcType != null);
@@ -485,7 +768,11 @@ public class DataTable {
             fieldsString = fieldsString.replace(")", "");
         }
 
-        int[] rows = this.getRowsFromSQL(sql);
+        String sqlTemp = sql.toLowerCase();
+        if (isOrderBy) {
+            sqlTemp = sqlTemp.split("order by")[0].trim();
+        }
+        int[] rows = this.getRowsFromSQL(sqlTemp);
         int[] cols = this.getColsFromSQL(fieldsString);
 
         boolean isDistinct = sql.toLowerCase().contains("distinct");
@@ -497,12 +784,14 @@ public class DataTable {
                 String fieldName = sql.toLowerCase().split("from")[0].split("distinct")[1].trim();
                 outTable = computeDistinct(rows, fieldName);
             }
-        } else {
-            if (rows.length > 0 && cols.length > 0) {
+        } else if (rows.length > 0 && cols.length > 0) {
+            if (isOrderBy && orderCol > -1) {
+                outTable = compute(rows, cols, orderCol); // Order the table
+            } else {
                 outTable = compute(rows, cols);
             }
         }
-        
+
         if (isFunction) {
             return computeFunction(outTable, funcType);
         }
@@ -578,6 +867,37 @@ public class DataTable {
         return dt;
     }
 
+    public DataTable compute(int[] rows, int[] columns, int orderCol) {
+        int[] colAll = new int[columns.length + 1];
+
+        for (int i = 0; i < colAll.length - 1; i++) {
+            colAll[i] = columns[i];
+        }
+        colAll[colAll.length - 1] = orderCol;
+
+        DataTable dt = compute(rows, colAll);
+
+        dt = dt.getOrderedTable(this.getField(orderCol).getName(), true);
+
+        DataTable outDt = new DataTable();
+
+        for (String f : dt.getFieldNames()) {
+            if (f.equalsIgnoreCase(this.getField(orderCol).getName())) {
+                continue;
+            }
+            outDt.addField(f, dt.getField(f).getType());
+        }
+
+        for (int i = 0; i < dt.getRecordCount(); i++) {
+            outDt.addRecord();
+            for (int j = 0; j < outDt.getFieldCount(); j++) {
+                outDt.getField(j).set(outDt.getRecordCount() - 1, dt.getField(outDt.getField(j).getName()).get(i));
+            }
+        }
+
+        return outDt;
+    }
+
     private DataTable computeDistinct(int[] rows, String columnName) {
         DataTable dt = new DataTable();
 
@@ -604,14 +924,14 @@ public class DataTable {
             rows.add(i);
         }
 
-        if (sql.toLowerCase().contains("where")) {
-            String[] conditions = sql.toLowerCase().split("where")[1].trim().split("and");
+        if (sql.toLowerCase().contains(" where ")) {
+            String[] conditions = sql.toLowerCase().split(" where ")[1].trim().split(" and ");
             for (String cond : conditions) {
                 String cond1 = cond.trim();
                 String fldName, condRhs;
                 if (cond1.contains(">=")) {
-                    fldName = cond1.split(">=")[0].trim().replace("\"", "");
-                    condRhs = cond1.split(">=")[1].trim().replace("\"", "");
+                    fldName = cond1.split(">=")[0].trim().replace("\"", "").replace("\'", "");
+                    condRhs = cond1.split(">=")[1].trim().replace("\"", "").replace("\'", "");
                     if (this.containsField(fldName) && this.getField(fldName).getType() != fieldType.String) {
                         for (int row : rows) {
                             if (removeRows.contains(row)) {
@@ -622,16 +942,14 @@ public class DataTable {
                                 if ((int) this.getField(fldName).get(row) < Integer.valueOf(condRhs)) {
                                     removeRows.add(row);
                                 }
-                            } else {
-                                if ((double) this.getField(fldName).get(row) < Double.valueOf(condRhs)) {
-                                    removeRows.add(row);
-                                }
+                            } else if ((double) this.getField(fldName).get(row) < Double.valueOf(condRhs)) {
+                                removeRows.add(row);
                             }
                         }
                     }
                 } else if (cond1.contains("<=")) {
-                    fldName = cond1.split("<=")[0].trim().replace("\"", "");
-                    condRhs = cond1.split("<=")[1].trim().replace("\"", "");
+                    fldName = cond1.split("<=")[0].trim().replace("\"", "").replace("\'", "");
+                    condRhs = cond1.split("<=")[1].trim().replace("\"", "").replace("\'", "");
                     if (this.containsField(fldName) && this.getField(fldName).getType() != fieldType.String) {
                         for (int row : rows) {
                             if (removeRows.contains(row)) {
@@ -642,16 +960,14 @@ public class DataTable {
                                 if ((int) this.getField(fldName).get(row) > Integer.valueOf(condRhs)) {
                                     removeRows.add(row);
                                 }
-                            } else {
-                                if ((double) this.getField(fldName).get(row) > Double.valueOf(condRhs)) {
-                                    removeRows.add(row);
-                                }
+                            } else if ((double) this.getField(fldName).get(row) > Double.valueOf(condRhs)) {
+                                removeRows.add(row);
                             }
                         }
                     }
                 } else if (cond1.contains("<")) {
-                    fldName = cond1.split("<")[0].trim().replace("\"", "");
-                    condRhs = cond1.split("<")[1].trim().replace("\"", "");
+                    fldName = cond1.split("<")[0].trim().replace("\"", "").replace("\'", "");
+                    condRhs = cond1.split("<")[1].trim().replace("\"", "").replace("\'", "");
                     if (this.containsField(fldName) && this.getField(fldName).getType() != fieldType.String) {
                         for (int row : rows) {
                             if (removeRows.contains(row)) {
@@ -662,16 +978,14 @@ public class DataTable {
                                 if ((int) this.getField(fldName).get(row) >= Integer.valueOf(condRhs)) {
                                     removeRows.add(row);
                                 }
-                            } else {
-                                if ((double) this.getField(fldName).get(row) >= Double.valueOf(condRhs)) {
-                                    removeRows.add(row);
-                                }
+                            } else if ((double) this.getField(fldName).get(row) >= Double.valueOf(condRhs)) {
+                                removeRows.add(row);
                             }
                         }
                     }
                 } else if (cond1.contains(">")) {
-                    fldName = cond1.split(">")[0].trim().replace("\"", "");
-                    condRhs = cond1.split(">")[1].trim().replace("\"", "");
+                    fldName = cond1.split(">")[0].trim().replace("\"", "").replace("\'", "");
+                    condRhs = cond1.split(">")[1].trim().replace("\"", "").replace("\'", "");
                     if (this.containsField(fldName) && this.getField(fldName).getType() != fieldType.String) {
                         for (int row : rows) {
                             if (removeRows.contains(row)) {
@@ -682,16 +996,14 @@ public class DataTable {
                                 if ((int) this.getField(fldName).get(row) <= Integer.valueOf(condRhs)) {
                                     removeRows.add(row);
                                 }
-                            } else {
-                                if ((double) this.getField(fldName).get(row) <= Double.valueOf(condRhs)) {
-                                    removeRows.add(row);
-                                }
+                            } else if ((double) this.getField(fldName).get(row) <= Double.valueOf(condRhs)) {
+                                removeRows.add(row);
                             }
                         }
                     }
                 } else if (cond1.contains("=")) {
-                    fldName = cond1.split("=")[0].trim().replace("\"", "");
-                    condRhs = cond1.split("=")[1].trim().replace("\"", "");
+                    fldName = cond1.split("=")[0].trim().replace("\"", "").replace("\'", "");
+                    condRhs = cond1.split("=")[1].trim().replace("\"", "").replace("\'", "");
                     if (this.containsField(fldName) && this.getField(fldName).getType() != fieldType.String) {
                         for (int row : rows) {
                             if (removeRows.contains(row)) {
@@ -702,10 +1014,8 @@ public class DataTable {
                                 if ((int) this.getField(fldName).get(row) != Integer.valueOf(condRhs)) {
                                     removeRows.add(row);
                                 }
-                            } else {
-                                if ((double) this.getField(fldName).get(row) != Double.valueOf(condRhs)) {
-                                    removeRows.add(row);
-                                }
+                            } else if ((double) this.getField(fldName).get(row) != Double.valueOf(condRhs)) {
+                                removeRows.add(row);
                             }
                         }
                     } else if (this.containsField(fldName) && this.getField(fldName).getType() == fieldType.String) {
@@ -723,7 +1033,7 @@ public class DataTable {
             }
         }
 
-        if (rows.size() > removeRows.size()) {
+        if (rows.size() >= removeRows.size()) {
             for (int removeRow : removeRows) {
                 rows.remove((Object) removeRow);
             }
@@ -742,7 +1052,12 @@ public class DataTable {
     private int[] getColsFromSQL(String fieldsString) {
         int[] out = null;
 
-        String[] fields = fieldsString.split(",");
+        String[] fields;
+        if ("*".equals(fieldsString.trim())) {
+            fields = this.getFieldNames();
+        } else {
+            fields = fieldsString.split(",");
+        }
 
         List<Integer> cols = new ArrayList();
         for (String field : fields) {
@@ -844,6 +1159,10 @@ public class DataTable {
             defaultPrimaryKey = value;
             updatePrimaryKey();
         }
+    }
+
+    public int getDefaultPrimaryKey() {
+        return defaultPrimaryKey;
     }
 
     public void setReadOnly(boolean value) {

@@ -6,64 +6,108 @@ package datasetjava;
  * and open the template in the editor.
  */
 
-
-import java.util.TreeMap;
-
 /**
  *
  * @author Shao
  */
 public class Record {
-    private final TreeMap<Integer, Field> fields;
+
+    private DataTable table;
     private final int recordNum;
-    
-    public Record(int recNum, TreeMap<Integer, Field> flds){
+    private boolean isCopyRecord = false;
+
+    public Record(int recNum, DataTable t) {
         recordNum = recNum;
-        fields = flds;
+        table = t;
     }
-    
-    public Object get(int fieldIndex){
-        if (fields == null ||  fields.size() < fieldIndex) {
+
+    public Record(Record copyRecord) {
+        isCopyRecord = true;
+        recordNum = copyRecord.getRecordNum(); // not in one table
+
+        table = copyRecord.getTable().getEmptyTable();
+
+        table.addRecord();
+
+        for (String fieldName : copyRecord.getFieldNames()) {
+            table.getField(fieldName).set(0, copyRecord.get(fieldName));
+        }
+    }
+
+    public DataTable getTable() {
+        return table;
+    }
+
+    public Object get(int fieldIndex) {
+        if (table == null || table.getFieldCount() < fieldIndex) {
             return null;
         }
-        return fields.get(fieldIndex).get(recordNum);
+        return table.getField(fieldIndex).get(isCopyRecord ? 0 : recordNum);
     }
-    
-    public Object get(String fieldName){
-        if (fields == null) {
+
+    public Object get(String fieldName) {
+        if (table == null) {
             return null;
         }
-        for (int index = 0; index < fields.size(); index++)
-            if (fields.get(index).getName().equalsIgnoreCase(fieldName)) return fields.get(index).get(recordNum);        
-        
+        for (int index = 0; index < table.getFieldCount(); index++) {
+            if (table.getField(index).getName().equalsIgnoreCase(fieldName)) {
+                return table.getField(index).get(isCopyRecord ? 0 : recordNum);
+            }
+        }
+
         return null;
     }
-    
-    public int getRecordNum(){
+
+    public void set(int fieldIndex, Object value) {
+        if (table == null || table.getFieldCount() <= fieldIndex) {
+            return;
+        }
+
+        table.getField(fieldIndex).set(isCopyRecord ? 0 : recordNum, value);
+    }
+
+    public void set(String fieldName, Object value) {
+        if (table == null) {
+            return;
+        }
+
+        for (int index = 0; index < table.getFieldCount(); index++) {
+            if (table.getField(index).getName().equalsIgnoreCase(fieldName)) {
+                table.getField(index).set(isCopyRecord ? 0 : recordNum, value);
+                return;
+            }
+        }
+    }
+
+    public int getRecordNum() {
         return recordNum;
     }
-    
-    public int getFieldCount(){
-        return fields.size();
+
+    public int getFieldCount() {
+        return table.getFieldCount();
     }
-    
-    public String[] getFieldNames(){
-        String[] names = new String[fields.size()];
-        for (int i = 0; i < fields.size(); i++) names[i] = fields.get(i).getName();
+
+    public String[] getFieldNames() {
+        String[] names = new String[table.getFieldCount()];
+        for (int i = 0; i < table.getFieldCount(); i++) {
+            names[i] = table.getField(i).getName();
+        }
         return names;
     }
-    
-    public DataTable.fieldType[] getFieldTypes(){
-        DataTable.fieldType[] types = new DataTable.fieldType[fields.size()];
-        for (int i = 0; i < fields.size(); i++) types[i] = fields.get(i).getType();
+
+    public DataTable.fieldType[] getFieldTypes() {
+        DataTable.fieldType[] types = new DataTable.fieldType[table.getFieldCount()];
+        for (int i = 0; i < table.getFieldCount(); i++) {
+            types[i] = table.getField(i).getType();
+        }
         return types;
     }
-    
+
     public String getSQLiteInsertQuery() {
         String sql = "";
 
         String names = "", values = "";
-        
+
         for (int i = 0; i < getFieldCount(); i++) {
             names += String.format("\'%s\'", getFieldNames()[i]);
             String value = "";
@@ -76,8 +120,8 @@ public class Record {
                 values += ",";
             }
         }
-        sql = " ("+ names + ") values (" + values + ");";
-        
+        sql = " (" + names + ") values (" + values + ");";
+
         return sql;
     }
 }
