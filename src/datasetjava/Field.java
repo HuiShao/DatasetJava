@@ -16,7 +16,7 @@ import java.util.List;
  * @author Shao
  */
 public class Field {
-    private final java.util.TreeMap map;
+    private java.util.ArrayList list;
     private final DataTable.fieldType fieldType;
     private final String name;
     private boolean isPrimaryKey = false;
@@ -29,16 +29,16 @@ public class Field {
         fieldType = type;
         switch (type){
             case String:
-                map = new java.util.TreeMap<Integer, String>();
+                list = new java.util.ArrayList<String>();
                 break;
             case Integer:
-                map = new java.util.TreeMap<Integer, Integer>();
+                list = new java.util.ArrayList<Integer>();
                 break;
             case Double:
-                map = new java.util.TreeMap<Integer, Double>();
+                list = new java.util.ArrayList<Double>();
                 break;
             default:
-                map = new java.util.TreeMap<Integer, String>();
+                list = new java.util.ArrayList<String>();
         }
         isChanged = true;
     }
@@ -48,50 +48,50 @@ public class Field {
         fieldType = DataTable.fieldType.getType(copyField.fieldType.toString());
         switch (fieldType){
             case String:
-                map = new java.util.TreeMap<Integer, String>();
+                list = new java.util.ArrayList<String>();
                 String valueString;
-                for (Object i : copyField.map.keySet()) {
+                for (int i = 0; i < copyField.list.size(); i++) {
                     try {
-                        valueString = copyField.map.get(i).toString();
+                        valueString = copyField.list.get(i).toString();
                     } catch (Exception e) {
                         valueString = "";
                     }
-                    map.put((int) i, valueString);
+                    list.add(i, valueString);
                 }
                 break;
             case Integer:
-                map = new java.util.TreeMap<Integer, Integer>();
+                list = new java.util.ArrayList<Integer>();
                 int valueInt;
-                for (Object i : copyField.map.keySet()) {
+                for (int i = 0; i < copyField.list.size(); i++) {
                     try {
-                        valueInt = Integer.valueOf(copyField.map.get(i).toString());
+                        valueInt = Integer.valueOf(copyField.list.get(i).toString());
                     } catch (Exception e) {
                         valueInt = 0;
                     }
-                    map.put((int) i, valueInt);
+                    list.add(i, valueInt);
                 }
                 break;
             case Double:
-                map = new java.util.TreeMap<Integer, Double>();
+                list = new java.util.ArrayList<Double>();
                 double valueDouble;
-                for (Object i : copyField.map.keySet()) {
+                for (int i = 0; i < copyField.list.size(); i++) {
                     try {
-                        valueDouble = Double.valueOf(copyField.map.get(i).toString());
+                        valueDouble = Double.valueOf(copyField.list.get(i).toString());
                     } catch (Exception e) {
                         valueDouble = 0.0;
                     }
-                    map.put((int) i, valueDouble);
+                    list.add(i, valueDouble);
                 }
                 break;
             default:
-                map = new java.util.TreeMap<Integer, String>();
-                for (Object i : copyField.map.keySet()) {
+                list = new java.util.ArrayList<String>();
+                for (int i = 0; i < copyField.list.size(); i++) {
                     try {
-                        valueString = copyField.map.get(i).toString();
+                        valueString = copyField.list.get(i).toString();
                     } catch (Exception e) {
                         valueString = "";
                     }
-                    map.put((int) i, valueString);
+                    list.add(i, valueString);
                 }
         }
         isNullDefaultValue = copyField.isNullDefaultValue;
@@ -115,21 +115,26 @@ public class Field {
     }
     
     public void set(int recNum, Object value){
-        map.put(recNum, value);
+        list.set(recNum, value);
+        isChanged = true;
+    }
+    
+    public void add(int recNum, Object value){
+        list.add(recNum, value);
         isChanged = true;
     }
     
     public void remove(int recNum) {
-        map.remove(recNum);
+        list.remove(recNum);
         isChanged = true;
     }
     
     public Object get(int recNum){
-        return map.get(recNum);
+        return list.get(recNum);
     }
     
     public boolean containsValue(Object value){
-        return map.containsValue(value);
+        return list.contains(value);
     }
     
     public void setUnique(boolean value){
@@ -200,29 +205,29 @@ public class Field {
     }
     
     public String[] toStringArray(){
-        String[] out = new String[map.size()];
+        String[] out = new String[list.size()];
         
-        for (int i = 0; i < map.size(); i++) {
-            out[i] = map.get(i).toString();
+        for (int i = 0; i < list.size(); i++) {
+            out[i] = list.get(i).toString();
         }
         
         return out;
     }
     
     public int[] getSortedOrder(boolean isAscending) {
-        int[] newOrder = new int[map.size()];
+        int[] newOrder = new int[list.size()];
         
         switch (fieldType) {
             case Integer:
-                List<Integer> sortedInt = new ArrayList(map.values());
+                List<Integer> sortedInt = new ArrayList(list);
                 if (isAscending) {
                     Collections.sort(sortedInt);
                 } else {
                     Collections.reverse(sortedInt);
                 }
-                for (int i = 0; i < map.size(); i++) {
-                    for (int j = 0; j < map.size(); j++) {
-                        if (map.get(j) == sortedInt.get(i)) {
+                for (int i = 0; i < list.size(); i++) {
+                    for (int j = 0; j < list.size(); j++) {
+                        if (list.get(j) == sortedInt.get(i)) {
                             newOrder[i] = j;
                             break;
                         }
@@ -230,15 +235,15 @@ public class Field {
                 }
                 break;
             case Double:
-                List<Double> sortedDouble = new ArrayList(map.values());
+                List<Double> sortedDouble = new ArrayList(list);
                 if (isAscending) {
                     Collections.sort(sortedDouble);
                 } else {
                     Collections.reverse(sortedDouble);
                 }
-                for (int i = 0; i < map.size(); i++) {
-                    for (int j = 0; j < map.size(); j++) {
-                        if (map.get(j) == sortedDouble.get(i)) {
+                for (int i = 0; i < list.size(); i++) {
+                    for (int j = 0; j < list.size(); j++) {
+                        if (list.get(j) == sortedDouble.get(i)) {
                             newOrder[i] = j;
                             break;
                         }
@@ -246,15 +251,15 @@ public class Field {
                 }
                 break;
             default:
-                List<String> sortedString = new ArrayList(map.values());
+                List<String> sortedString = new ArrayList(list);
                 if (isAscending) {
                     Collections.sort(sortedString);
                 } else {
                     Collections.reverse(sortedString);
                 }
-                for (int i = 0; i < map.size(); i++) {
-                    for (int j = 0; j < map.size(); j++) {
-                        if (map.get(j) == sortedString.get(i)) {
+                for (int i = 0; i < list.size(); i++) {
+                    for (int j = 0; j < list.size(); j++) {
+                        if (list.get(j) == sortedString.get(i)) {
                             newOrder[i] = j;
                             break;
                         }

@@ -5,20 +5,30 @@ package datasetjava;
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.text.DateFormat;
 import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  *
@@ -90,16 +100,16 @@ public class DataTable implements Cloneable {
         for (Field field : fields.values()) {
             switch (field.getType()) {
                 case String:
-                    field.set(recordCount, "");
+                    field.add(recordCount, "");
                     break;
                 case Integer:
-                    field.set(recordCount, 0);
+                    field.add(recordCount, 0);
                     break;
                 case Double:
-                    field.set(recordCount, 0.0);
+                    field.add(recordCount, 0.0);
                     break;
                 default:
-                    field.set(recordCount, "");
+                    field.add(recordCount, "");
             }
         }
         recordCount++; // record number starts from 0
@@ -408,7 +418,7 @@ public class DataTable implements Cloneable {
 
     public enum itemDividerType {
 
-        Tab, Comma, Semicolon;
+        Tab, Comma, Semicolon, Space;
 
         public static itemDividerType getType(String value) {
             switch (value) {
@@ -424,6 +434,10 @@ public class DataTable implements Cloneable {
                 case "Semicolon":
                 case "semicolon":
                     return Semicolon;
+                case " ":
+                case "space":
+                case "Space":
+                    return Space;
             }
             return null;
         }
@@ -440,6 +454,8 @@ public class DataTable implements Cloneable {
                     return ",";
                 case Semicolon:
                     return ";";
+                case Space:
+                    return "[ ]+";
             }
             return "\t";
         }
@@ -565,6 +581,9 @@ public class DataTable implements Cloneable {
 
                 conn.setAutoCommit(false);
                 for (String s : sqls) {
+                    if (s.isEmpty()) {
+                        continue;
+                    }
                     conn.prepareStatement(s).executeUpdate();
                 }
             } catch (SQLException e) {
@@ -592,7 +611,7 @@ public class DataTable implements Cloneable {
         prepareTable(path);
         exportSQLite(path, getSQLiteInsertQuery(recs));
     }
-    
+
     private final int oneTimeRecords = 2000;
 
     public void exportSQLite(String path) {
@@ -1056,7 +1075,7 @@ public class DataTable implements Cloneable {
         if ("*".equals(fieldsString.trim())) {
             fields = this.getFieldNames();
         } else {
-            fields = fieldsString.split(",");
+            fields = this.split(fieldsString, ",");
         }
 
         List<Integer> cols = new ArrayList();
@@ -1219,14 +1238,148 @@ public class DataTable implements Cloneable {
         return getOrderedTable(getField(fieldIndex).getName(), isAscending);
     }
 
+    public static DataTable importTxt(String filePath, itemDividerType divider) {
+        File f = new File(filePath);
+        DataTable outTable = new DataTable();
+        if (!f.exists()) {
+            return outTable;
+        }
+
+        String tbName = f.getName().toLowerCase().replace(".csv", "");
+        tbName = tbName.replace(".txt", "");
+        outTable.setName(tbName);
+
+        HashMap[] nameTypes = getFieldNameType(filePath, divider);
+        HashMap<Integer, String> names = nameTypes[0];
+        HashMap<Integer, fieldType> types = nameTypes[1];
+        for (int i = 0; i < names.size(); i++) {
+            outTable.addField(names.get(i), types.get(i));
+        }
+
+        try {
+            FileReader fr = new FileReader(filePath);
+            BufferedReader br = new BufferedReader(fr);
+            String readLines = br.readLine();
+
+            String[] linesContent;
+            while ((readLines = br.readLine()) != null) {
+                outTable.addRecord();
+                linesContent = split(readLines, divider.toString());
+                for (int j = 0; j < linesContent.length; j++) {
+                    switch (outTable.getField(j).getType()) {
+                        case Integer:
+                            outTable.getField(j).set(outTable.getRecordCount() - 1, Integer.parseInt(linesContent[j].trim()));
+                            break;
+                        case Double:
+                            outTable.getField(j).set(outTable.getRecordCount() - 1, Double.parseDouble(linesContent[j].trim()));
+                            break;
+                        case String:
+                            outTable.getField(j).set(outTable.getRecordCount() - 1, linesContent[j]);
+                            break;
+                    }
+                }
+            }
+
+            br.close();
+            fr.close();
+        } catch (Exception e) {
+            Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, e);
+        }
+
+        return outTable;
+    }
+
+    private static HashMap<String, fieldType>[] getFieldNameType(String filePath, itemDividerType divider) {
+        HashMap<Integer, String> names = new HashMap();
+        HashMap<Integer, fieldType> types = new HashMap();
+
+        try {
+            FileReader fr = new FileReader(filePath);
+
+            BufferedReader br = new BufferedReader(fr);
+            String readLines = br.readLine();
+            String[] headingsContent = split(readLines, divider.toString());
+            for (int i = 0; i < headingsContent.length; i++) {
+//                if (avoidColumns.contains(i)) {
+//                    continue;
+//                }
+                names.put(i, headingsContent[i].trim());
+            }
+
+            while ((readLines = br.readLine()) != null) {
+                headingsContent = split(readLines, divider.toString());
+
+                for (int i = 0; i < headingsContent.length; i++) {
+                    if (types.containsKey(i) && types.get(i) != fieldType.Double && types.get(i) != fieldType.String) {
+                        try { // Not supporting import int
+                            int t = Integer.parseInt(headingsContent[i].trim());
+                            types.put(i, fieldType.Integer);
+                            continue;
+                        } catch (NumberFormatException numberFormatException) {
+                        }
+                    } else if (!types.containsKey(i)) {
+                        try { // Not supporting import int
+                            int t = Integer.parseInt(headingsContent[i].trim());
+                            types.put(i, fieldType.Integer);
+                            continue;
+                        } catch (NumberFormatException numberFormatException) {
+                        }
+                    }
+
+                    if (types.containsKey(i) && types.get(i) != fieldType.String) {
+                        try {
+                            double t = Double.parseDouble(headingsContent[i].trim());
+                            types.put(i, fieldType.Double);
+                            continue;
+                        } catch (NumberFormatException numberFormatException) {
+                        }
+                    } else if (!types.containsKey(i)) {
+                        try {
+                            double t = Double.parseDouble(headingsContent[i].trim());
+                            types.put(i, fieldType.Double);
+                            continue;
+                        } catch (NumberFormatException numberFormatException) {
+                        }
+                    }
+
+                    types.put(i, fieldType.String);
+                }
+            }
+
+            if (types.size() < names.size()) {
+                for (int i = types.size() - 1; i < names.size(); i++) {
+                    types.put(i, fieldType.String);
+                }
+            }
+
+            br.close();
+            fr.close();
+        } catch (IOException e) {
+            Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, e);
+        }
+
+        HashMap[] out = new HashMap[2];
+
+        out[0] = names;
+        out[1] = types;
+        return out;
+    }
+
+    public static String[] split(String in, String divider) {
+        String[] tokens = in.split(divider + "(?=([^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+        for (int i = 0; i < tokens.length; i++) {
+            tokens[i] = tokens[i].trim().replace("\"", "");
+        }
+        return tokens;
+    }
+
     //This method is only used during testing.
     public static void main(String[] args) {
-        String inPath = "C:\\Users\\Shao\\Desktop\\HydroClimate.db3";
-        String tableName = "data_twin_sr";
+        String csvPath = "C:\\Users\\Shawn\\Desktop\\wetlands.csv";
 
-        DataTable dt = DataTable.importSQLiteTable(inPath, tableName);
+        DataTable dt = DataTable.importTxt(csvPath, itemDividerType.Comma);
 
-        String outPath = "C:\\Users\\Shao\\Desktop\\data_twin_sr.csv";
+        String outPath = "C:\\Users\\Shawn\\Desktop\\wetlands_export.csv";
         dt.exportCSV(outPath);
     }
 }
