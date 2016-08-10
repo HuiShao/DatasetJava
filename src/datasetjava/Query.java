@@ -8,6 +8,7 @@ package datasetjava;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
@@ -132,5 +133,31 @@ public class Query {
         }
 
         return out;
+    }
+    
+    public static ResultSet getDataTable(String query, String path) {
+        //Configure the data access service;
+        ResultSet rs = null;
+        try{
+            Connection conn = OpenSQLiteConnection(path);
+            rs = conn.createStatement().executeQuery(query);
+//            conn.close();
+        }  catch (SQLException e) {
+            Logger.getLogger(Query.class.getName()).log(Level.SEVERE, null, e);
+        }
+        
+        //Return the table;
+        return rs;        
+    }
+    
+    public static ResultSet getDataTable(String query, String path, String filter){
+        if (!filter.isEmpty()) {
+            if (filter.toLowerCase().startsWith(" where ")) {
+                query += filter;
+            } else {
+                query += (" where " + filter);
+            }
+        }
+        return getDataTable(query, path);
     }
 }

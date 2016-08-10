@@ -604,7 +604,7 @@ public class DataTable implements Cloneable {
         exportSQLite(path, getSQLiteInsertQuery(recs));
     }
 
-    private final int oneTimeRecords = 2000;
+    private final int oneTimeRecords = 20000;
 
     public void exportSQLite(String path) {
 //        String sql = "";
@@ -711,16 +711,16 @@ public class DataTable implements Cloneable {
         exportSQLite(path, sb.toString());
     }
 
-    public static DataTable importSQLiteTable(String sqlitePath, String tableName) {
+    public static DataTable importSQLiteTable(Connection conn, String tableName) {
         DataTable dt = new DataTable(tableName);
         try {
 //            Connection connection;
 //            Class.forName("org.sqlite.JDBC");
 //            connection = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath);
-            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+//            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
             String sql = "Select * from " + tableName;
 
-            java.sql.ResultSet rs = connection.createStatement().executeQuery(sql);
+            java.sql.ResultSet rs = conn.createStatement().executeQuery(sql);
             int fieldCount = rs.getMetaData().getColumnCount();
 
             for (int index = 0; index < fieldCount; index++) {
@@ -742,6 +742,8 @@ public class DataTable implements Cloneable {
             if (dt.getFieldCount() != fieldCount) {
                 System.err.println("Importing SQLite Error!");
             }
+            
+//            connection.close();
         } catch (SQLException e) {
             System.err.println(e.getClass().getName() + ": " + e.getMessage());
             Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, e);

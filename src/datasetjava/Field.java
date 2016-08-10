@@ -64,7 +64,7 @@ public class Field {
                 int valueInt;
                 for (int i = 0; i < copyField.list.size(); i++) {
                     try {
-                        valueInt = Integer.valueOf(copyField.list.get(i).toString());
+                        valueInt = Double.valueOf(copyField.list.get(i).toString()).intValue();
                     } catch (Exception e) {
                         valueInt = 0;
                     }

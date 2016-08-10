@@ -5,8 +5,6 @@ package datasetjava;
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-
-
 import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
@@ -35,20 +33,18 @@ public class DataSet {
         dataTables = new TreeMap();
         dsPath = "";
     }
-    
+
     public DataSet(String path) {
         dataTables = new TreeMap();
         dsPath = path;
     }
-
-    public static DataSet importSQLiteDatabase(String sqlitePath) {
-        DataSet ds = new DataSet();
+    
+    public static boolean checkIsSQLiteDatebaseValid(String sqlitePath) {
+        
         try {
-            Connection connection;
-            Class.forName("org.sqlite.JDBC");
-            connection = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath);
-//            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
-            
+            DataSet ds = new DataSet();
+            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+
             System.out.println("OpenDS : " + sqlitePath);
 
             java.sql.ResultSet tablesRS = connection.getMetaData().getTables(null, null, "%", null);
@@ -57,14 +53,44 @@ public class DataSet {
                 if (tableName.contains("sqlite_")) {
                     continue;
                 }
-                DataTable dt = DataTable.importSQLiteTable(sqlitePath, tableName);
+                DataTable dt = DataTable.importSQLiteTable(connection, tableName);
                 System.out.println(tableName + " : " + (ds.getTableCount() - 1));
                 ds.insertTable(dt);
             }
             ds.setPath(sqlitePath);
-        } catch (SQLException | ClassNotFoundException e) {
+            connection.close();
+        } catch (SQLException e) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static DataSet importSQLiteDatabase(String sqlitePath) {
+        DataSet ds = new DataSet();
+        try {
+//            Connection connection;
+//            Class.forName("org.sqlite.JDBC");
+//            connection = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath);
+            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+
+            System.out.println("OpenDS : " + sqlitePath);
+
+            java.sql.ResultSet tablesRS = connection.getMetaData().getTables(null, null, "%", null);
+            while (tablesRS.next()) {
+                String tableName = tablesRS.getString(3);
+                if (tableName.contains("sqlite_")) {
+                    continue;
+                }
+                DataTable dt = DataTable.importSQLiteTable(connection, tableName);
+                System.out.println(tableName + " : " + (ds.getTableCount() - 1));
+                ds.insertTable(dt);
+            }
+            ds.setPath(sqlitePath);
+            connection.close();
+        } catch (SQLException e) {
             System.err.println(e.getClass().getName() + ": " + e.getMessage());
-            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+//            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
         }
 
         return ds;
@@ -140,7 +166,7 @@ public class DataSet {
         tableCount = 0;
     }
 
-    public void removeTable(int tableIndex) {
+    public void removeTableIfExists(int tableIndex) {
         for (int index = 0; index < tableCount; index++) {
             if (index == tableIndex) {
                 dataTables.remove(index);
@@ -154,10 +180,10 @@ public class DataSet {
         tableCount--;
     }
 
-    public void removeTable(String tableName) {
+    public void removeTableIfExists(String tableName) {
         for (int index = 0; index < tableCount; index++) {
             if (dataTables.get(index).getName().equalsIgnoreCase(tableName)) {
-                removeTable(index);
+                removeTableIfExists(index);
                 return;
             }
         }
@@ -212,7 +238,7 @@ public class DataSet {
     public void setPath(String value) {
         dsPath = value;
     }
-    
+
     public String getPath() {
         if (dsPath == null || dsPath.isEmpty()) {
             JFileChooser selector = new JFileChooser();
@@ -229,7 +255,7 @@ public class DataSet {
                 dsPath += ".db3";
             }
         }
-        
+
         return dsPath;
     }
 
@@ -246,7 +272,7 @@ public class DataSet {
                 Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
-        
+
         this.clearDeletedTables(getPath());
 
         for (DataTable table : dataTables.values()) {
@@ -259,14 +285,13 @@ public class DataSet {
             } else {
                 String message = "Table \'" + table.getName() + "\' is READ ONLY! CAN NOT be exported!";
                 JOptionPane.showMessageDialog(null, message,
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                return;
             }
         }
     }
-    
-    private ArrayList<String> getDeletedTableNames(String pathDB) {
-        Connection conn = Query.OpenSQLiteConnection(pathDB);
+
+    private ArrayList<String> getDeletedTableNames(Connection conn) {
         ArrayList<String> tableNames = new ArrayList();
         try {
             conn.setAutoCommit(false);
@@ -284,7 +309,6 @@ public class DataSet {
         } finally {
             try {
                 conn.commit();
-//                conn.close();
             } catch (SQLException ex) {
                 System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
                 Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
@@ -292,12 +316,15 @@ public class DataSet {
         }
         return tableNames;
     }
-    
+
     private void clearDeletedTables(String pathDB) {
         Connection conn = Query.OpenSQLiteConnection(pathDB);
         try {
             conn.setAutoCommit(false);
-            for (String tableName : getDeletedTableNames(pathDB)) {
+            for (String tableName : getDeletedTableNames(conn)) {
+                if (tableName.isEmpty()) {
+                    continue;
+                }
                 String dropSQL = "drop table if exists " + tableName;
                 conn.prepareStatement(dropSQL).executeUpdate();
             }
@@ -339,19 +366,19 @@ public class DataSet {
     //This method is only used during testing.
     public static void main(String[] args) {
         String inPath = "C:\\Users\\Shawn\\Desktop\\base_historical.db3";
-        
+
         DataSet ds = DataSet.importSQLiteDatabase(inPath);
 
         DataTable dt = ds.getTable("wascobs_all");
 
         int[] recNum = dt.getRecordNumbers("id = 17");
-                
+
         dt.deleteRecords(recNum);
-        
+
         recNum = dt.getRecordNumbers("id = 13");
-                
+
         dt.deleteRecords(recNum);
-        
+
         ds.save();
     }
 }
