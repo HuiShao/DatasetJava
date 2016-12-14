@@ -10,7 +10,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -88,6 +90,7 @@ public class Query {
             try {
                 if (connection.isClosed()) {
                     connection = DriverManager.getConnection("jdbc:sqlite:" + path_abs);
+                    activeConnections.put(path_abs, connection);
                 }
             } catch (SQLException ex) {
                 Logger.getLogger(Query.class.getName()).log(Level.SEVERE, null, ex);
@@ -159,5 +162,19 @@ public class Query {
             }
         }
         return getDataTable(query, path);
+    }
+    
+    public static List<String> getTableColumnNames(ResultSet rs) {
+        List<String> out = new ArrayList();
+        try {
+            if (rs != null) {
+                for (int i = 1; i <= rs.getMetaData().getColumnCount(); i++) {
+                    out.add(rs.getMetaData().getColumnLabel(i));
+                }
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(Query.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return out;
     }
 }

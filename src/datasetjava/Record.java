@@ -1,5 +1,10 @@
 package datasetjava;
 
+import datasetjava.DataTable.fieldType;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 /*
  * To change this license header, choose License Headers in Project Properties.
  * To change this template file, choose Tools | Templates
@@ -36,6 +41,19 @@ public class Record {
 
     public DataTable getTable() {
         return table;
+    }
+    
+    public boolean equals(Record compareRec) {
+        for (int i = 0; i < this.getFieldCount(); i++) {
+            if (!this.getFieldNames()[i].equalsIgnoreCase(compareRec.getFieldNames()[i])) {
+                return false;
+            }
+            
+            if (this.getFieldTypes()[i] != compareRec.getFieldTypes()[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public Object get(int fieldIndex) {

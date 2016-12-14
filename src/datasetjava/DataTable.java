@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -40,6 +42,16 @@ public class DataTable implements Cloneable {
         fields = new TreeMap();
         recordCount = 0;
         fieldCount = 0;
+    }
+    
+    public DataTable(String name, List<Map.Entry<String, DataTable.fieldType>> fieldNameTypes) {
+        tableName = name;
+        fields = new TreeMap();
+        recordCount = 0;
+        fieldCount = 0;
+        for (int i = 0; i < fieldNameTypes.size(); i++) {
+            this.addField(fieldNameTypes.get(i).getKey(), fieldNameTypes.get(i).getValue());
+        }
     }
 
     public DataTable() {
@@ -604,7 +616,9 @@ public class DataTable implements Cloneable {
         exportSQLite(path, getSQLiteInsertQuery(recs));
     }
 
-    private final int oneTimeRecords = 20000;
+    private final int oneTimeRecords = 10000;
+    
+    public static int RecordLimit = 500000;
 
     public void exportSQLite(String path) {
 //        String sql = "";
@@ -638,6 +652,34 @@ public class DataTable implements Cloneable {
 
     }
 
+    public void appendSQLite(String path) {
+        if (!DataSet.getTableNames(path).contains(this.tableName)) {
+            createTable(path);
+        }
+
+        if (this.getRecordCount() > oneTimeRecords) {
+            int times = getRecordCount() / oneTimeRecords;
+            int reminds = getRecordCount() % oneTimeRecords;
+            List<Integer> recs = new ArrayList();
+            for (int i = 0; i < times; i++) {
+                recs = new ArrayList();
+                for (int j = 0; j < oneTimeRecords; j++) {
+                    recs.add(j + i * oneTimeRecords);
+                }
+                this.exportSQLite(path, getSQLiteInsertQuery(recs));
+
+            }
+
+            recs = new ArrayList();
+            for (int j = times * oneTimeRecords; j < times * oneTimeRecords + reminds; j++) {
+                recs.add(j);
+            }
+            this.exportSQLite(path, getSQLiteInsertQuery(recs));
+        } else {
+            exportSQLite(path, getSQLiteInsertQuery());
+        }
+    }
+
     private String getSQLiteInsertQuery(List<Integer> recs) {
 //        String sql = "";
         StringBuilder sb = new StringBuilder();
@@ -646,12 +688,12 @@ public class DataTable implements Cloneable {
             String names = "", values = "";
 
             for (int i = 0; i < getFieldCount(); i++) {
-                names += String.format("\'%s\'", getFieldNames()[i]);
+                names += String.format("\"%s\"", getFieldNames()[i]);
                 String value = "";
                 if (getField(i).get(rec) != null) {
                     value = getField(i).get(rec).toString();
                 }
-                values += String.format("\'%s\'", value);
+                values += String.format("\"%s\"", value);
                 if (i < getFieldCount() - 1) {
                     names += ",";
                     values += ",";
@@ -671,12 +713,12 @@ public class DataTable implements Cloneable {
             String names = "", values = "";
 
             for (int i = 0; i < getFieldCount(); i++) {
-                names += String.format("\'%s\'", getFieldNames()[i]);
+                names += String.format("\"%s\"", getFieldNames()[i]);
                 String value = "";
                 if (getField(i).get(rec) != null) {
                     value = getField(i).get(rec).toString();
                 }
-                values += String.format("\'%s\'", value);
+                values += String.format("\"%s\"", value);
                 if (i < getFieldCount() - 1) {
                     names += ",";
                     values += ",";
@@ -710,16 +752,26 @@ public class DataTable implements Cloneable {
         prepareTable(path);
         exportSQLite(path, sb.toString());
     }
-
+    
+    public static DataTable importSQLiteTable(String dsPath, String sql, String tableName) {
+        return importSQLiteTable(Query.OpenSQLiteConnection(dsPath), sql, tableName);
+    }
+    
     public static DataTable importSQLiteTable(Connection conn, String tableName) {
+        return importSQLiteTable(conn, "", tableName);
+    }
+
+    public static DataTable importSQLiteTable(Connection conn, String sql, String tableName) {
         DataTable dt = new DataTable(tableName);
         try {
 //            Connection connection;
 //            Class.forName("org.sqlite.JDBC");
 //            connection = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath);
 //            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
-            String sql = "Select * from " + tableName;
-
+//            String sql = "Select * from " + tableName;
+            if (sql.isEmpty()) {
+                sql = "Select * from " + tableName;
+            }
             java.sql.ResultSet rs = conn.createStatement().executeQuery(sql);
             int fieldCount = rs.getMetaData().getColumnCount();
 
@@ -742,7 +794,7 @@ public class DataTable implements Cloneable {
             if (dt.getFieldCount() != fieldCount) {
                 System.err.println("Importing SQLite Error!");
             }
-            
+
 //            connection.close();
         } catch (SQLException e) {
             System.err.println(e.getClass().getName() + ": " + e.getMessage());
@@ -1024,10 +1076,10 @@ public class DataTable implements Cloneable {
                             }
 
                             if (this.getField(fldName).getType() == fieldType.Integer) {
-                                if ((int) this.getField(fldName).get(row) != Integer.valueOf(condRhs)) {
+                                if (Double.valueOf(this.getField(fldName).get(row).toString()).intValue() != Integer.valueOf(condRhs)) {
                                     removeRows.add(row);
                                 }
-                            } else if ((double) this.getField(fldName).get(row) != Double.valueOf(condRhs)) {
+                            } else if (!Objects.equals(Double.valueOf(this.getField(fldName).get(row).toString()), Double.valueOf(condRhs))) {
                                 removeRows.add(row);
                             }
                         }
@@ -1060,6 +1112,37 @@ public class DataTable implements Cloneable {
         }
 
         return out;
+    }
+    
+    public String[] getFieldNamesFromSQL(String sql) {
+        String sqlLower = sql.toLowerCase();
+
+        if (sqlLower.contains("distinct")) {
+            sqlLower = sqlLower.replace("distinct", "");
+        }
+
+        String fieldsString = sqlLower.split("from")[0].replace("select", "").trim();
+
+        functionType funcType = this.getFunctionType(fieldsString);
+
+        boolean isFunction = (funcType != null);
+
+        if (isFunction) {
+            fieldsString = fieldsString.replace(funcType.toString(), "");
+            fieldsString = fieldsString.replace("(", "");
+            fieldsString = fieldsString.replace(")", "");
+        }
+        int[] cols = this.getColsFromSQL(fieldsString);
+        
+        if (cols != null && cols.length > 0) {
+            String[] out = new String[cols.length];
+            for (int i = 0; i < cols.length; i++) {
+                out[i] = this.getFieldNames()[cols[i]];
+            }
+            return out;
+        } else {
+            return null;
+        }
     }
 
     private int[] getColsFromSQL(String fieldsString) {
@@ -1150,6 +1233,27 @@ public class DataTable implements Cloneable {
             String dropSQL = "drop table if exists " + tableName;
             conn.setAutoCommit(false);
             conn.prepareStatement(dropSQL).executeUpdate();
+            conn.prepareStatement(createTableDeclaration()).executeUpdate();
+            String deleteSQL = "delete from " + tableName;
+            conn.prepareStatement(deleteSQL).executeUpdate();
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+        } finally {
+            try {
+                conn.commit();
+                conn.close();
+            } catch (SQLException ex) {
+                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+
+    public void createTable(String pathDB) {
+        Connection conn = Query.OpenSQLiteConnection(pathDB);
+        try {
+            conn.setAutoCommit(false);
             conn.prepareStatement(createTableDeclaration()).executeUpdate();
             String deleteSQL = "delete from " + tableName;
             conn.prepareStatement(deleteSQL).executeUpdate();

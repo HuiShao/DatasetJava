@@ -12,6 +12,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,9 +40,9 @@ public class DataSet {
         dataTables = new TreeMap();
         dsPath = path;
     }
-    
+
     public static boolean checkIsSQLiteDatebaseValid(String sqlitePath) {
-        
+
         try {
             DataSet ds = new DataSet();
             Connection connection = Query.OpenSQLiteConnection(sqlitePath);
@@ -96,6 +98,28 @@ public class DataSet {
         return ds;
     }
 
+    public static List<String> getTableNames(String sqlitePath) {
+        List<String> list = new ArrayList();
+        try {
+            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+
+            System.out.println("OpenDS : " + sqlitePath);
+
+            java.sql.ResultSet tablesRS = connection.getMetaData().getTables(null, null, "%", null);
+            while (tablesRS.next()) {
+                String tableName = tablesRS.getString(3);
+                if (tableName.contains("sqlite_")) {
+                    continue;
+                }
+                list.add(tableName);
+            }
+            connection.close();
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+        }
+        return list;
+    }
+
     public void exportSQLiteDatabase(String sqlitePath) {
         File f = new File(sqlitePath);
         if (f.exists()) {
@@ -107,6 +131,11 @@ public class DataSet {
             this.dataTables.get(index).prepareTable(sqlitePath);
         }
 
+    }
+    
+    public void replaceTable(DataTable table) {
+        removeTableIfExists(table.getName());
+        insertTable(table);
     }
 
     public void insertTable(DataTable table) {
@@ -121,17 +150,32 @@ public class DataSet {
         tableCount++; // table index starts from 0
     }
 
-    public void addNewTable(String tableName) {
+    public DataTable addNewTable(String tableName) {
         for (int index = 0; index < dataTables.size(); index++) {
             if (dataTables.get(index).getName().equalsIgnoreCase(tableName)) {
                 System.err.println("Table name exists in DataSet!\n Creating table FAILED!");
-                return;
+                return null;
             }
         }
 
         dataTables.put(tableCount, new DataTable(tableName));
         tableCount++; // table index starts from 0
         System.out.println("Creating table SUCCESSFULLY!");
+        return dataTables.get(tableCount - 1);
+    }
+
+    public DataTable addNewTable(String tableName, List<Map.Entry<String, DataTable.fieldType>> fieldNameTypes) {
+        for (int index = 0; index < dataTables.size(); index++) {
+            if (dataTables.get(index).getName().equalsIgnoreCase(tableName)) {
+                System.err.println("Table name exists in DataSet!\n Creating table FAILED!");
+                return null;
+            }
+        }
+
+        dataTables.put(tableCount, new DataTable(tableName, fieldNameTypes));
+        tableCount++; // table index starts from 0
+        System.out.println("Creating table SUCCESSFULLY!");
+        return dataTables.get(tableCount - 1);
     }
 
     public DataTable getTable(int tableIndex) {
@@ -189,6 +233,21 @@ public class DataSet {
         }
     }
 
+    public static void removeTableIfExists(String tableName, String sqlitePath) {
+        try {
+            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+
+            System.out.println("OpenDS : " + sqlitePath);
+
+            String dropSQL = "drop table if exists " + tableName;
+            connection.prepareStatement(dropSQL).executeUpdate();
+
+            connection.close();
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+        }
+    }
+
     public int getTableCount() {
         return tableCount;
     }
@@ -210,6 +269,10 @@ public class DataSet {
         return false;
     }
 
+    public List<DataTable> getTables() {
+        return new ArrayList(dataTables.values());
+    }
+
     private String getTableNameFromSQL(String sql) {
         String out;
         if (sql.toLowerCase().contains("where")) {
@@ -227,11 +290,56 @@ public class DataSet {
     }
 
     public DataTable compute(String sql) {
+
         String tableName = this.getTableNameFromSQL(sql);
         if (this.containsTable(tableName)) {
-            return this.getTable(tableName).compute(sql);
+            try {
+                ResultSet rs = Query.OpenSQLiteConnection(dsPath).createStatement().executeQuery(sql);
+                String[] fieldNames = this.getTable(tableName).getFieldNamesFromSQL(sql);
+                if (fieldNames != null && fieldNames.length > 0) {
+                    List<Map.Entry<String, DataTable.fieldType>> types = new ArrayList();
+                    for (int i = 0; i < fieldNames.length; i++) {
+                        types.add(new MyEntry(fieldNames[i], this.getTable(tableName).getField(fieldNames[i]).getType()));
+                    }
+                    DataTable table = new DataTable(tableName, types);
+                    
+                    while (rs.next()) {
+                        table.addRecord();
+                        for (int i = 0; i < table.getFieldCount(); i++) {
+                            table.getField(i).set(table.getRecordCount() - 1, rs.getObject(i + 1));
+                        }
+                    }
+                    
+                    return table;
+                } else {
+                    return new DataTable(tableName);
+                }
+            } catch (SQLException sQLException) {
+                return new DataTable(tableName);
+            }
+
+//            return this.getTable(tableName).compute(sql);
         } else {
             return new DataTable(tableName);
+        }
+    }
+    
+    public void executeQuery(String sql) {
+        Connection conn = Query.OpenSQLiteConnection(dsPath);
+        try {
+            conn.setAutoCommit(false);
+            conn.prepareStatement(sql).executeUpdate();
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+        } finally {
+            try {
+                conn.commit();
+                conn.close();
+            } catch (SQLException ex) {
+                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
     }
 
@@ -362,6 +470,32 @@ public class DataSet {
             dataTables.get(tableIndex).setReadOnly(value);
         }
     }
+    
+    public static List<String> getTableList(String dsPath) {
+        List<String> tableNames = new ArrayList();
+        Connection conn = Query.OpenSQLiteConnection(dsPath);
+        try {
+            conn.setAutoCommit(false);
+            String searchSQL = "select distinct tbl_name from sqlite_master";
+            ResultSet rs = conn.createStatement().executeQuery(searchSQL);
+            while (rs.next()) {
+                String tableName = rs.getString("tbl_name");
+                tableNames.add(tableName);
+            }
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+        } finally {
+            try {
+                conn.commit();
+                conn.close();
+            } catch (SQLException ex) {
+                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return tableNames;
+    }
 
     //This method is only used during testing.
     public static void main(String[] args) {
@@ -380,5 +514,34 @@ public class DataSet {
         dt.deleteRecords(recNum);
 
         ds.save();
+    }
+
+    class MyEntry<K, V> implements Map.Entry<K, V> {
+
+        private final K key;
+        private V value;
+
+        public MyEntry(final K key) {
+            this.key = key;
+        }
+
+        public MyEntry(final K key, final V value) {
+            this.key = key;
+            this.value = value;
+        }
+
+        public K getKey() {
+            return key;
+        }
+
+        public V getValue() {
+            return value;
+        }
+
+        public V setValue(final V value) {
+            final V oldValue = this.value;
+            this.value = value;
+            return oldValue;
+        }
     }
 }
