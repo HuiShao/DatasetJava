@@ -1076,7 +1076,7 @@ public class DataTable implements Cloneable {
                             }
 
                             if (this.getField(fldName).getType() == fieldType.Integer) {
-                                if (Double.valueOf(this.getField(fldName).get(row).toString()).intValue() != Integer.valueOf(condRhs)) {
+                                if (!Objects.equals(Double.valueOf(this.getField(fldName).get(row).toString()), Double.valueOf(condRhs))) {
                                     removeRows.add(row);
                                 }
                             } else if (!Objects.equals(Double.valueOf(this.getField(fldName).get(row).toString()), Double.valueOf(condRhs))) {
