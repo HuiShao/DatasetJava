@@ -342,6 +342,25 @@ public class DataSet {
             }
         }
     }
+    
+    public static void executeQuery(String path, String sql) {
+        Connection conn = Query.OpenSQLiteConnection(path);
+        try {
+            conn.setAutoCommit(false);
+            conn.prepareStatement(sql).executeUpdate();
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+        } finally {
+            try {
+                conn.commit();
+                conn.close();
+            } catch (SQLException ex) {
+                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
 
     public void setPath(String value) {
         dsPath = value;

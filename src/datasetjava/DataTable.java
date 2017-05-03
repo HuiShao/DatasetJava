@@ -43,7 +43,7 @@ public class DataTable implements Cloneable {
         recordCount = 0;
         fieldCount = 0;
     }
-    
+
     public DataTable(String name, List<Map.Entry<String, DataTable.fieldType>> fieldNameTypes) {
         tableName = name;
         fields = new TreeMap();
@@ -617,8 +617,8 @@ public class DataTable implements Cloneable {
     }
 
     private final int oneTimeRecords = 10000;
-    
-    public static int RecordLimit = 500000;
+
+    public static int RecordLimit = 100000;
 
     public void exportSQLite(String path) {
 //        String sql = "";
@@ -752,11 +752,11 @@ public class DataTable implements Cloneable {
         prepareTable(path);
         exportSQLite(path, sb.toString());
     }
-    
+
     public static DataTable importSQLiteTable(String dsPath, String sql, String tableName) {
         return importSQLiteTable(Query.OpenSQLiteConnection(dsPath), sql, tableName);
     }
-    
+
     public static DataTable importSQLiteTable(Connection conn, String tableName) {
         return importSQLiteTable(conn, "", tableName);
     }
@@ -1113,7 +1113,7 @@ public class DataTable implements Cloneable {
 
         return out;
     }
-    
+
     public String[] getFieldNamesFromSQL(String sql) {
         String sqlLower = sql.toLowerCase();
 
@@ -1133,7 +1133,7 @@ public class DataTable implements Cloneable {
             fieldsString = fieldsString.replace(")", "");
         }
         int[] cols = this.getColsFromSQL(fieldsString);
-        
+
         if (cols != null && cols.length > 0) {
             String[] out = new String[cols.length];
             for (int i = 0; i < cols.length; i++) {
@@ -1327,6 +1327,33 @@ public class DataTable implements Cloneable {
             for (int j = 0; j < fieldCount; j++) {
                 orderedTable.getField(j).set(i, getRecord(newOrder[i]).get(j));
             }
+        }
+
+        return orderedTable;
+    }
+
+    public DataTable getOrderedTableSQL(String dbPath, String fieldName, boolean isAscending) {
+        String sql = String.format("SELECT * FROM %s ORDER BY %s", this.getName(), fieldName);
+
+        java.sql.ResultSet rs = Query.getDataTable(sql, dbPath);
+
+        DataTable orderedTable = new DataTable(getName());
+
+        for (int i = 0; i < fieldCount; i++) {
+            orderedTable.addField(getField(i).getName(), getField(i).getType());
+        }
+
+        try {
+            int i = 0;
+            while (rs.next()) {
+                orderedTable.addRecord();
+                for (int j = 0; j < fieldCount; j++) {
+                    orderedTable.getField(j).set(i, rs.getObject(j + 1));
+                }
+                i++;
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
         }
 
         return orderedTable;

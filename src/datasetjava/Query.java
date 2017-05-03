@@ -153,6 +153,16 @@ public class Query {
         return rs;        
     }
     
+    public static boolean containsTable(String tableName, String path) {
+        try{
+            Connection conn = OpenSQLiteConnection(path);
+            conn.createStatement().executeQuery(String.format("SELECT * FROM %s", tableName));
+            return true;
+        }  catch (SQLException e) {
+            return false;
+        }
+    }
+    
     public static ResultSet getDataTable(String query, String path, String filter){
         if (!filter.isEmpty()) {
             if (filter.toLowerCase().startsWith(" where ")) {
