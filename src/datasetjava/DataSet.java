@@ -84,9 +84,9 @@ public class DataSet {
                 if (tableName.contains("sqlite_")) {
                     continue;
                 }
-                DataTable dt = DataTable.importSQLiteTable(connection, tableName);
-                System.out.println(tableName + " : " + (ds.getTableCount() - 1));
-                ds.insertTable(dt);
+//                DataTable dt = DataTable.importSQLiteTable(connection, tableName);
+//                System.out.println(tableName + " : " + (ds.getTableCount() - 1));
+                ds.insertTable(new DataTable(tableName, false));
             }
             ds.setPath(sqlitePath);
             connection.close();
@@ -132,7 +132,7 @@ public class DataSet {
         }
 
     }
-    
+
     public void replaceTable(DataTable table) {
         removeTableIfExists(table.getName());
         insertTable(table);
@@ -183,12 +183,20 @@ public class DataSet {
             return null;
         }
 
+        if (!dataTables.get(tableIndex).isInitialized()) {
+            Connection connection = Query.OpenSQLiteConnection(this.dsPath);
+            dataTables.put(tableIndex, DataTable.importSQLiteTable(connection, dataTables.get(tableIndex).getName()));
+        }
         return dataTables.get(tableIndex);
     }
 
     public DataTable getTable(String tableName) {
         for (int index = 0; index < tableCount; index++) {
             if (dataTables.get(index).getName().equalsIgnoreCase(tableName)) {
+                if (!dataTables.get(index).isInitialized()) {
+                    Connection connection = Query.OpenSQLiteConnection(this.dsPath);
+                    dataTables.put(index, DataTable.importSQLiteTable(connection, tableName));
+                }
                 return dataTables.get(index);
             }
         }
@@ -302,14 +310,14 @@ public class DataSet {
                         types.add(new MyEntry(fieldNames[i], this.getTable(tableName).getField(fieldNames[i]).getType()));
                     }
                     DataTable table = new DataTable(tableName, types);
-                    
+
                     while (rs.next()) {
                         table.addRecord();
                         for (int i = 0; i < table.getFieldCount(); i++) {
                             table.getField(i).set(table.getRecordCount() - 1, rs.getObject(i + 1));
                         }
                     }
-                    
+
                     return table;
                 } else {
                     return new DataTable(tableName);
@@ -323,7 +331,7 @@ public class DataSet {
             return new DataTable(tableName);
         }
     }
-    
+
     public void executeQuery(String sql) {
         Connection conn = Query.OpenSQLiteConnection(dsPath);
         try {
@@ -342,7 +350,7 @@ public class DataSet {
             }
         }
     }
-    
+
     public static void executeQuery(String path, String sql) {
         Connection conn = Query.OpenSQLiteConnection(path);
         try {
@@ -489,7 +497,7 @@ public class DataSet {
             dataTables.get(tableIndex).setReadOnly(value);
         }
     }
-    
+
     public static List<String> getTableList(String dsPath) {
         List<String> tableNames = new ArrayList();
         Connection conn = Query.OpenSQLiteConnection(dsPath);

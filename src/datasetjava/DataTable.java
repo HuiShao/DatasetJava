@@ -36,12 +36,22 @@ public class DataTable implements Cloneable {
     private String tableName;
     private int defaultPrimaryKey = 0;
     private boolean isReadOnly = false;
+    private boolean isInitialized;
 
     public DataTable(String name) {
         tableName = name;
         fields = new TreeMap();
         recordCount = 0;
         fieldCount = 0;
+        isInitialized = true;
+    }
+    
+    public DataTable(String name, boolean isInitialized) {
+        tableName = name;
+        fields = new TreeMap();
+        recordCount = 0;
+        fieldCount = 0;
+        this.isInitialized = isInitialized;
     }
 
     public DataTable(String name, List<Map.Entry<String, DataTable.fieldType>> fieldNameTypes) {
@@ -52,12 +62,22 @@ public class DataTable implements Cloneable {
         for (int i = 0; i < fieldNameTypes.size(); i++) {
             this.addField(fieldNameTypes.get(i).getKey(), fieldNameTypes.get(i).getValue());
         }
+        isInitialized = true;
     }
 
     public DataTable() {
         fields = new TreeMap();
         recordCount = 0;
         fieldCount = 0;
+        isInitialized = true;
+    }
+    
+    public boolean isInitialized() {
+        return isInitialized;
+    }
+    
+    public void setIsInitialized(boolean value) {
+        isInitialized = value;
     }
 
     public DataTable(DataTable cloneTable) {
@@ -70,6 +90,7 @@ public class DataTable implements Cloneable {
         fieldCount = new Integer(cloneTable.fieldCount);
         isReadOnly = cloneTable.isReadOnly;
         defaultPrimaryKey = cloneTable.defaultPrimaryKey;
+        isInitialized = cloneTable.isInitialized();
     }
 
     public DataTable getEmptyTable() {
@@ -575,20 +596,28 @@ public class DataTable implements Cloneable {
         exportTXT(path, doubleFormate, itemDividerType.Comma);
     }
 
-    private void exportSQLite(String path, String sql) {
-        if (sql == null || sql.isEmpty()) {
+    private void exportSQLite(String path, StringBuilder sb) {
+        if (sb == null || sb.length() <= 0) {
         } else {
-            String[] sqls = sql.split(";");
-
+            //String[] sqls = sql.split(";");
+            int firstIndex = 0;
+            int lastIndex;
             Connection conn = Query.OpenSQLiteConnection(path);
             try {
-
                 conn.setAutoCommit(false);
-                for (String s : sqls) {
-                    if (s.isEmpty()) {
-                        continue;
+//                for (String s : sqls) {
+//                    if (s.isEmpty()) {
+//                        continue;
+//                    }
+//                    conn.prepareStatement(s).executeUpdate();
+//                }
+                while (sb.indexOf(";", firstIndex + 1) >= 0) {
+                    lastIndex = sb.indexOf(";", firstIndex + 1);
+                    String s = sb.substring(firstIndex, lastIndex);
+                    if (!s.isEmpty()) {
+                        conn.prepareStatement(s).executeUpdate();
                     }
-                    conn.prepareStatement(s).executeUpdate();
+                    firstIndex = lastIndex;
                 }
             } catch (SQLException e) {
                 System.err.println(e.getClass().getName() + ": " + e.getMessage());
@@ -616,9 +645,9 @@ public class DataTable implements Cloneable {
         exportSQLite(path, getSQLiteInsertQuery(recs));
     }
 
-    private final int oneTimeRecords = 10000;
+    private final int oneTimeRecords = 1000000;
 
-    public static int RecordLimit = 100000;
+    public static int RecordLimit = 5000000;
 
     public void exportSQLite(String path) {
 //        String sql = "";
@@ -680,7 +709,7 @@ public class DataTable implements Cloneable {
         }
     }
 
-    private String getSQLiteInsertQuery(List<Integer> recs) {
+    private StringBuilder getSQLiteInsertQuery(List<Integer> recs) {
 //        String sql = "";
         StringBuilder sb = new StringBuilder();
 
@@ -702,10 +731,11 @@ public class DataTable implements Cloneable {
             sb.append("insert into " + tableName + " (" + names + ") values (" + values + ");");
         }
 
-        return sb.toString();
+//        return sb.toString();
+        return sb;
     }
 
-    private String getSQLiteInsertQuery() {
+    private StringBuilder getSQLiteInsertQuery() {
         StringBuilder sb = new StringBuilder();
 
 //        String sql = "";
@@ -728,7 +758,8 @@ public class DataTable implements Cloneable {
             sb.append("insert into " + tableName + " (" + names + ") values (" + values + ");");
         }
 
-        return sb.toString();
+//        return sb.toString();
+        return sb;
     }
 
     public void exportSQLite(String path, int startRec, int endRec) {
@@ -750,7 +781,8 @@ public class DataTable implements Cloneable {
         }
 
         prepareTable(path);
-        exportSQLite(path, sb.toString());
+//        exportSQLite(path, sb.toString());
+        exportSQLite(path, sb);
     }
 
     public static DataTable importSQLiteTable(String dsPath, String sql, String tableName) {
@@ -774,18 +806,29 @@ public class DataTable implements Cloneable {
             }
             java.sql.ResultSet rs = conn.createStatement().executeQuery(sql);
             int fieldCount = rs.getMetaData().getColumnCount();
+            List<fieldType> fieldTypes = new ArrayList();
 
             for (int index = 0; index < fieldCount; index++) {
                 String name = rs.getMetaData().getColumnName(index + 1);
                 fieldType type = fieldType.getType(rs.getMetaData().getColumnTypeName(index + 1));
                 dt.addField(name, type);
+                fieldTypes.add(type);
             }
 
             while (rs.next()) {
                 dt.addRecord();
                 for (int col = 0; col < fieldCount; col++) {
-                    Object rowItem = rs.getObject(col + 1);
-                    dt.getField(col).set(dt.getRecordCount() - 1, rowItem);
+                    switch (fieldTypes.get(col)) {
+                        case Integer:
+                            dt.getField(col).set(dt.getRecordCount() - 1, rs.getInt(col + 1));
+                            break;
+                        case Double:
+                            dt.getField(col).set(dt.getRecordCount() - 1, rs.getDouble(col + 1));
+                            break;
+                        default:
+                            dt.getField(col).set(dt.getRecordCount() - 1, rs.getString(col + 1));
+                            break;
+                    }
                 }
             }
 

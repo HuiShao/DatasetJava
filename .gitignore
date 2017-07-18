@@ -50,3 +50,5 @@ null
 dist/DatasetJava.jar
 *.class
 dist/DatasetJava.jar
+dist/DatasetJava.jar
+*.class
