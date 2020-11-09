@@ -45,7 +45,7 @@ public class DataTable implements Cloneable {
         fieldCount = 0;
         isInitialized = true;
     }
-    
+
     public DataTable(String name, boolean isInitialized) {
         tableName = name;
         fields = new TreeMap();
@@ -71,11 +71,11 @@ public class DataTable implements Cloneable {
         fieldCount = 0;
         isInitialized = true;
     }
-    
+
     public boolean isInitialized() {
         return isInitialized;
     }
-    
+
     public void setIsInitialized(boolean value) {
         isInitialized = value;
     }
@@ -611,6 +611,10 @@ public class DataTable implements Cloneable {
 //                    }
 //                    conn.prepareStatement(s).executeUpdate();
 //                }
+//                conn.createStatement().execute("PRAGMA synchronous = OFF");
+//                conn.createStatement().execute("PRAGMA journal_mode = MEMORY");
+//                conn.prepareStatement("PRAGMA synchronous = OFF").execute();
+//                conn.prepareStatement("PRAGMA journal_mode = MEMORY").execute();
                 while (sb.indexOf(";", firstIndex + 1) >= 0) {
                     lastIndex = sb.indexOf(";", firstIndex + 1);
                     String s = sb.substring(firstIndex, lastIndex);
@@ -645,9 +649,9 @@ public class DataTable implements Cloneable {
         exportSQLite(path, getSQLiteInsertQuery(recs));
     }
 
-    private final int oneTimeRecords = 1000000;
+    private final int oneTimeRecords = 500000;
 
-    public static int RecordLimit = 5000000;
+    public static int RecordLimit = 1000000;
 
     public void exportSQLite(String path) {
 //        String sql = "";

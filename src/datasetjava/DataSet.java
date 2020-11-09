@@ -8,9 +8,9 @@ package datasetjava;
 import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +112,51 @@ public class DataSet {
                     continue;
                 }
                 list.add(tableName);
+            }
+            connection.close();
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+        }
+        return list;
+    }
+
+    public static boolean containsTable(String sqlitePath, String tableName) throws SQLException {
+        try {
+            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+
+            System.out.println("OpenDS : " + sqlitePath);
+
+            java.sql.ResultSet tablesRS = connection.getMetaData().getTables(null, null, "%", null);
+            while (tablesRS.next()) {
+                String name = tablesRS.getString(3);
+                if (name.contains("sqlite_")) {
+                    continue;
+                }
+                if (name.equalsIgnoreCase(tableName)) {
+                    return true;
+                }
+            }
+            connection.close();
+        } catch (SQLException e) {
+            throw e;
+        }
+        return false;
+    }
+
+    public static List<String> getTableNamesToLower(String sqlitePath) {
+        List<String> list = new ArrayList();
+        try {
+            Connection connection = Query.OpenSQLiteConnection(sqlitePath);
+
+            System.out.println("OpenDS : " + sqlitePath);
+
+            java.sql.ResultSet tablesRS = connection.getMetaData().getTables(null, null, "%", null);
+            while (tablesRS.next()) {
+                String tableName = tablesRS.getString(3);
+                if (tableName.contains("sqlite_")) {
+                    continue;
+                }
+                list.add(tableName.toLowerCase());
             }
             connection.close();
         } catch (SQLException e) {
@@ -294,7 +339,7 @@ public class DataSet {
                 out = out.split("order by")[0].trim();
             }
         }
-        return out;
+        return out.replace("\"", "");
     }
 
     public DataTable compute(String sql) {
@@ -335,8 +380,15 @@ public class DataSet {
     public void executeQuery(String sql) {
         Connection conn = Query.OpenSQLiteConnection(dsPath);
         try {
+            String[] sqls = sql.split(";");
             conn.setAutoCommit(false);
-            conn.prepareStatement(sql).executeUpdate();
+            for (String s : sqls) {
+                if (s.isEmpty()) {
+                    continue;
+                }
+                conn.prepareStatement(s).executeUpdate();
+            }
+//            conn.prepareStatement(sql).executeUpdate();
         } catch (SQLException e) {
             System.err.println(e.getClass().getName() + ": " + e.getMessage());
             Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
@@ -354,8 +406,15 @@ public class DataSet {
     public static void executeQuery(String path, String sql) {
         Connection conn = Query.OpenSQLiteConnection(path);
         try {
+            String[] sqls = sql.split(";");
             conn.setAutoCommit(false);
-            conn.prepareStatement(sql).executeUpdate();
+            for (String s : sqls) {
+                if (s.isEmpty()) {
+                    continue;
+                }
+                conn.prepareStatement(s).executeUpdate();
+            }
+//            conn.prepareStatement(sql).executeUpdate();
         } catch (SQLException e) {
             System.err.println(e.getClass().getName() + ": " + e.getMessage());
             Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
@@ -366,6 +425,54 @@ public class DataSet {
             } catch (SQLException ex) {
                 System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
                 Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+
+    public static void execute(String path, String sql) {
+        Connection conn = Query.OpenSQLiteConnection(path);
+        try {
+            String[] sqls = sql.split(";");
+            Statement stat = conn.createStatement();
+            for (String s : sqls) {
+                if (s.isEmpty()) {
+                    continue;
+                }
+                stat.execute(s);
+            }
+        } catch (SQLException e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+        }
+    }
+
+    public static void executeQuery(String path, StringBuilder sb) {
+        if (sb == null || sb.length() <= 0) {
+        } else {
+            int firstIndex = 0;
+            int lastIndex;
+            Connection conn = Query.OpenSQLiteConnection(path);
+            try {
+                conn.setAutoCommit(false);
+                while (sb.indexOf(";", firstIndex + 1) >= 0) {
+                    lastIndex = sb.indexOf(";", firstIndex + 1);
+                    String s = sb.substring(firstIndex, lastIndex);
+                    if (!s.isEmpty()) {
+                        conn.prepareStatement(s).executeUpdate();
+                    }
+                    firstIndex = lastIndex;
+                }
+            } catch (SQLException e) {
+                System.err.println(e.getClass().getName() + ": " + e.getMessage());
+                Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+            } finally {
+                try {
+                    conn.commit();
+                    conn.close();
+                } catch (SQLException ex) {
+                    System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+                    Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+                }
             }
         }
     }
@@ -498,32 +605,31 @@ public class DataSet {
         }
     }
 
-    public static List<String> getTableList(String dsPath) {
-        List<String> tableNames = new ArrayList();
-        Connection conn = Query.OpenSQLiteConnection(dsPath);
-        try {
-            conn.setAutoCommit(false);
-            String searchSQL = "select distinct tbl_name from sqlite_master";
-            ResultSet rs = conn.createStatement().executeQuery(searchSQL);
-            while (rs.next()) {
-                String tableName = rs.getString("tbl_name");
-                tableNames.add(tableName);
-            }
-        } catch (SQLException e) {
-            System.err.println(e.getClass().getName() + ": " + e.getMessage());
-            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
-        } finally {
-            try {
-                conn.commit();
-                conn.close();
-            } catch (SQLException ex) {
-                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
-                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
-            }
-        }
-        return tableNames;
-    }
-
+//    public static List<String> getTableList(String dsPath) {
+//        List<String> tableNames = new ArrayList();
+//        Connection conn = Query.OpenSQLiteConnection(dsPath);
+//        try {
+//            conn.setAutoCommit(false);
+//            String searchSQL = "select distinct tbl_name from sqlite_master";
+//            ResultSet rs = conn.createStatement().executeQuery(searchSQL);
+//            while (rs.next()) {
+//                String tableName = rs.getString("tbl_name");
+//                tableNames.add(tableName);
+//            }
+//        } catch (SQLException e) {
+//            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+//            Logger.getLogger(DataSet.class.getName()).log(Level.SEVERE, null, e);
+//        } finally {
+//            try {
+//                conn.commit();
+//                conn.close();
+//            } catch (SQLException ex) {
+//                System.err.println(ex.getClass().getName() + ": " + ex.getMessage());
+//                Logger.getLogger(DataTable.class.getName()).log(Level.SEVERE, null, ex);
+//            }
+//        }
+//        return tableNames;
+//    }
     //This method is only used during testing.
     public static void main(String[] args) {
         String inPath = "C:\\Users\\Shawn\\Desktop\\base_historical.db3";
